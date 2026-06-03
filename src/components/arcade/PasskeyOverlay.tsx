@@ -49,13 +49,14 @@ type Props =
 
 // ── Gamepad set sub-component ──────────────────────────────────────────────
 
-function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
+function GamepadSetPanel({ onSet, onCancel }: { onSet: (passkey: number[]) => void; onCancel: () => void }) {
   const [stage, setStage] = useState<SetStage>("record");
   const [recorded, setRecorded] = useState<number[]>([]);
   const [held, setHeld] = useState<number[]>([]);
   const [mismatch, setMismatch] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHeld = useRef("");
+  const lastB = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -63,6 +64,11 @@ function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
+        // B to cancel
+        const bNow = !!pad.buttons[1]?.pressed;
+        if (bNow && !lastB.current) onCancel();
+        lastB.current = bNow;
+
         const pressed = getPressedButtons(pad);
         const key = sortedKey(pressed);
         if (key !== lastHeld.current) {
@@ -107,7 +113,7 @@ function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
       if (holdTimer.current) clearTimeout(holdTimer.current);
       if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     };
-  }, [onSet]);
+  }, [onSet, onCancel]);
 
   const slots =
     stage === "record"
@@ -129,7 +135,7 @@ function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
           return (
             <div
               key={i}
-              className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-mono text-lg font-bold transition-all duration-150
+              className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-display text-lg font-bold transition-all duration-150
                 ${mismatch ? "border-destructive bg-destructive/10 text-destructive" : active ? "border-primary bg-primary/20 text-primary scale-105" : "border-border bg-background text-muted-foreground"}`}
             >
               {label ?? "·"}
@@ -138,12 +144,19 @@ function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
         })}
       </div>
 
-      {isHolding4 && <p className="text-center font-mono text-sm text-primary animate-pulse">Hold to {stage === "record" ? "record" : "confirm"}…</p>}
+      {isHolding4 && (
+        <p className="text-center font-mono text-sm text-primary animate-pulse">
+          Hold to {stage === "record" ? "record" : "confirm"}…
+        </p>
+      )}
       {mismatch && <p className="text-center font-mono text-sm text-destructive">Doesn't match — try again</p>}
 
       {stage === "confirm" && (
-        <button type="button" onClick={() => { setStage("record"); setRecorded([]); setHeld([]); lastHeld.current = ""; }}
-          className="rounded-2xl border border-border px-4 py-2 font-mono text-xs text-muted-foreground hover:border-primary/50 transition-colors">
+        <button
+          type="button"
+          onClick={() => { setStage("record"); setRecorded([]); setHeld([]); lastHeld.current = ""; }}
+          className="rounded-2xl border border-border px-4 py-2 font-display text-sm font-bold text-muted-foreground hover:border-primary/50 transition-colors"
+        >
           ← Start Over
         </button>
       )}
@@ -190,10 +203,9 @@ function KeyboardSetPanel({ onSet }: { onSet: (pin: string) => void }) {
         onChange={(e) => stage === "first" ? setFirst(e.target.value) : setConfirm(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") stage === "first" ? submitFirst() : submitConfirm();
-          if (e.key === "Escape") { /* let parent handle */ }
         }}
         placeholder="••••"
-        className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-mono text-xl tracking-[0.5em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
+        className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-display text-xl font-bold tracking-[0.4em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
           ${mismatch ? "border-destructive" : "border-border focus:border-primary"}`}
       />
 
@@ -201,15 +213,20 @@ function KeyboardSetPanel({ onSet }: { onSet: (pin: string) => void }) {
 
       <div className="flex gap-3">
         {stage === "confirm" && (
-          <button type="button" onClick={() => { setStage("first"); setConfirm(""); }}
-            className="flex-1 rounded-2xl border border-border px-4 py-2 font-mono text-xs text-muted-foreground hover:border-primary/50 transition-colors">
+          <button
+            type="button"
+            onClick={() => { setStage("first"); setConfirm(""); }}
+            className="flex-1 rounded-2xl border border-border px-4 py-2 font-display text-sm font-bold text-muted-foreground hover:border-primary/50 transition-colors"
+          >
             ← Back
           </button>
         )}
-        <button type="button"
+        <button
+          type="button"
           onClick={stage === "first" ? submitFirst : submitConfirm}
           disabled={stage === "first" ? first.length < 4 : confirm.length === 0}
-          className="flex-1 rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-mono text-sm text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          className="flex-1 rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-display text-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           {stage === "first" ? "Next →" : "Confirm"}
         </button>
       </div>
@@ -227,33 +244,32 @@ export function PasskeyOverlay(props: Props) {
   const [pinInput, setPinInput] = useState("");
   const [pinWrong, setPinWrong] = useState(false);
   const lastHeld = useRef("");
+  const lastB = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinRef = useRef<HTMLInputElement>(null);
 
-  // Determine what enter mode needs
   const enterNeedsGamepad = mode === "enter" && !!props.passkey?.length;
   const enterNeedsPin = mode === "enter" && !!props.pin;
 
-  // Auto-select correct tab in enter mode
   useEffect(() => {
-    if (mode === "enter") {
-      setTab(enterNeedsPin ? "keyboard" : "gamepad");
-    }
+    if (mode === "enter") setTab(enterNeedsPin ? "keyboard" : "gamepad");
   }, [mode, enterNeedsPin]);
 
   useEffect(() => {
-    if (mode === "enter" && tab === "keyboard") {
-      setTimeout(() => pinRef.current?.focus(), 50);
-    }
+    if (mode === "enter" && tab === "keyboard") setTimeout(() => pinRef.current?.focus(), 50);
   }, [mode, tab]);
 
-  // Gamepad polling for enter mode
+  // Gamepad polling for enter mode (+ B to cancel)
   useEffect(() => {
     if (mode !== "enter" || !enterNeedsGamepad) return;
     let raf = 0;
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
+        const bNow = !!pad.buttons[1]?.pressed;
+        if (bNow && !lastB.current) props.onCancel();
+        lastB.current = bNow;
+
         const pressed = getPressedButtons(pad);
         const key = sortedKey(pressed);
         if (key !== lastHeld.current) {
@@ -278,10 +294,25 @@ export function PasskeyOverlay(props: Props) {
     return () => { cancelAnimationFrame(raf); if (feedbackTimer.current) clearTimeout(feedbackTimer.current); };
   }, [mode, enterNeedsGamepad, props]);
 
+  // B to cancel for keyboard enter mode (no gamepad loop above)
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onCancel();
+    if (mode !== "enter" || enterNeedsGamepad) return;
+    let raf = 0;
+    const tick = () => {
+      const pad = getGamepad();
+      if (pad) {
+        const bNow = !!pad.buttons[1]?.pressed;
+        if (bNow && !lastB.current) props.onCancel();
+        lastB.current = bNow;
+      }
+      raf = requestAnimationFrame(tick);
     };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mode, enterNeedsGamepad, props]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") props.onCancel(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [props]);
@@ -298,10 +329,8 @@ export function PasskeyOverlay(props: Props) {
     }
   };
 
-  const heading =
-    mode === "set" ? "Set Passkey" : "Enter Passkey";
-
   const borderColor = wrong || pinWrong ? "border-destructive" : "border-primary";
+  const heading = mode === "set" ? "Set Passkey" : "Enter Passkey";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md">
@@ -312,21 +341,24 @@ export function PasskeyOverlay(props: Props) {
           <h2 className="mt-2 font-display text-3xl font-black">{profileName}</h2>
         </div>
 
-        {/* Tab switcher — set mode always shows both; enter mode only shows if profile has both */}
+        {/* Tab switcher */}
         {(mode === "set" || (enterNeedsGamepad && enterNeedsPin)) && (
           <div className="flex rounded-2xl border border-border overflow-hidden">
             {(["gamepad", "keyboard"] as InputTab[]).map((t) => (
-              <button key={t} type="button" onClick={() => setTab(t)}
-                className={`flex-1 py-2 font-mono text-sm transition-colors ${tab === t ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`flex-1 py-2 font-display text-sm font-bold transition-colors ${tab === t ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+              >
                 {t === "gamepad" ? "🎮 Gamepad" : "⌨️ Keyboard"}
               </button>
             ))}
           </div>
         )}
 
-        {/* Content */}
         {mode === "set" && tab === "gamepad" && (
-          <GamepadSetPanel onSet={(passkey) => props.onSet({ type: "gamepad", passkey })} />
+          <GamepadSetPanel onSet={(passkey) => props.onSet({ type: "gamepad", passkey })} onCancel={props.onCancel} />
         )}
         {mode === "set" && tab === "keyboard" && (
           <KeyboardSetPanel onSet={(pin) => props.onSet({ type: "pin", pin })} />
@@ -337,9 +369,11 @@ export function PasskeyOverlay(props: Props) {
             <p className="text-center font-mono text-sm text-muted-foreground">Hold your 4-button passkey to unlock</p>
             <div className="flex justify-center gap-3">
               {Array.from({ length: 4 }, (_, i) => (
-                <div key={i}
-                  className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-mono text-lg font-bold transition-all duration-150
-                    ${wrong ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-background text-muted-foreground"}`}>
+                <div
+                  key={i}
+                  className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-display text-lg font-bold transition-all duration-150
+                    ${wrong ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-background text-muted-foreground"}`}
+                >
                   ?
                 </div>
               ))}
@@ -358,20 +392,26 @@ export function PasskeyOverlay(props: Props) {
               onChange={(e) => setPinInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitPin(); }}
               placeholder="••••"
-              className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-mono text-xl tracking-[0.5em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
+              className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-display text-xl font-bold tracking-[0.4em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
                 ${pinWrong ? "border-destructive" : "border-border focus:border-primary"}`}
             />
             {pinWrong && <p className="text-center font-mono text-sm text-destructive">Wrong PIN</p>}
-            <button type="button" onClick={submitPin}
+            <button
+              type="button"
+              onClick={submitPin}
               disabled={pinInput.length === 0}
-              className="rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-mono text-sm text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              className="rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-display text-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               Unlock
             </button>
           </div>
         )}
 
-        <button type="button" onClick={props.onCancel}
-          className="rounded-2xl border border-border px-6 py-3 font-mono text-sm text-foreground hover:border-primary/50 transition-colors">
+        <button
+          type="button"
+          onClick={props.onCancel}
+          className="rounded-2xl border border-border px-6 py-3 font-display text-sm font-bold text-foreground hover:border-primary/50 transition-colors"
+        >
           Cancel
         </button>
       </div>

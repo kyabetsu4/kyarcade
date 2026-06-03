@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getGamepad } from "@/lib/arcade-bridge";
 
 type Props = {
   title: string;
@@ -13,13 +14,28 @@ export function PinEntryOverlay({ title, subtitle, onSuccess, onCancel, check }:
   const [wrong, setWrong] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastB = useRef(false);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // B button to cancel
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+    let raf = 0;
+    const tick = () => {
+      const pad = getGamepad();
+      if (pad) {
+        const bNow = !!pad.buttons[1]?.pressed;
+        if (bNow && !lastB.current) onCancel();
+        lastB.current = bNow;
+      }
+      raf = requestAnimationFrame(tick);
     };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [onCancel]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
@@ -51,19 +67,26 @@ export function PinEntryOverlay({ title, subtitle, onSuccess, onCancel, check }:
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
           placeholder="••••"
-          className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-mono text-xl tracking-[0.5em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
+          className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-display text-xl font-bold tracking-[0.4em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
             ${wrong ? "border-destructive" : "border-border focus:border-primary"}`}
         />
 
         {wrong && <p className="text-center font-mono text-sm text-destructive">Wrong passcode</p>}
 
         <div className="flex gap-3">
-          <button type="button" onClick={onCancel}
-            className="flex-1 rounded-2xl border border-border px-4 py-3 font-mono text-sm text-foreground hover:border-primary/50 transition-colors">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-2xl border border-border px-4 py-3 font-display text-sm font-bold text-foreground hover:border-primary/50 transition-colors"
+          >
             Cancel
           </button>
-          <button type="button" onClick={submit} disabled={value.length === 0}
-            className="flex-1 rounded-2xl border border-primary bg-primary px-4 py-3 font-mono text-sm text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={value.length === 0}
+            className="flex-1 rounded-2xl border border-primary bg-primary px-4 py-3 font-display text-sm font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Enter
           </button>
         </div>
