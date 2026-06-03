@@ -8,6 +8,7 @@ export function ArcadeShell({
   children,
   footer,
   showCredits = true,
+  onAdvanced,
 }: {
   eyebrow?: string;
   title?: string;
@@ -15,6 +16,7 @@ export function ArcadeShell({
   children: ReactNode;
   footer: ReactNode;
   showCredits?: boolean;
+  onAdvanced?: () => void;
 }) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -34,10 +36,25 @@ export function ArcadeShell({
             </span>
           ) : null}
         </div>
-        <Clock />
+        <div className="flex items-center gap-4">
+          {onAdvanced && (
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={onAdvanced}
+              aria-label="Advanced options"
+              className="rounded-xl px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-transparent hover:text-muted-foreground/40 transition-colors select-none"
+            >
+              ···
+            </button>
+          )}
+          <Clock />
+        </div>
       </header>
 
-      <main className="relative z-10 flex flex-1 items-center justify-center px-8 py-8">{children}</main>
+      <main className="relative z-10 flex flex-1 items-center justify-center px-8 py-8">
+        {children}
+      </main>
 
       <footer className="relative z-10 flex items-center justify-between px-8 py-4">
         {footer}

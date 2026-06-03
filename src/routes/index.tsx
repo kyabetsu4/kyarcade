@@ -167,6 +167,7 @@ function Index() {
     <ArcadeShell
       title="Select Player"
       showCredits={settings.showCredits}
+      onAdvanced={() => setAdvancedOpen(true)}
       footer={
         <div className="flex w-full items-center justify-center gap-12">
           {settingsOpen ? (
