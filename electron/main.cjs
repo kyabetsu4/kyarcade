@@ -44,6 +44,51 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+const DEFAULT_SAVE_PATHS = ["Emulation/saves", "Emulation/states"];
+
+function getAdvancedConfigPath(home) {
+  return path.join(home, "es-profiles", "kyarcade.json");
+}
+
+function loadAdvancedConfig(home) {
+  const fs = require("fs");
+  try {
+    return JSON.parse(fs.readFileSync(getAdvancedConfigPath(home), "utf8"));
+  } catch {
+    return { savePaths: DEFAULT_SAVE_PATHS };
+  }
+}
+
+function swapSaveSymlink(fs, home, profileId, relativePath) {
+  const targetPath = path.join(home, relativePath);
+  const profileStorage = path.join(home, "es-profiles", profileId, relativePath);
+
+  fs.mkdirSync(profileStorage, { recursive: true });
+
+  let targetIsReal = false;
+  let targetIsSymlink = false;
+  try {
+    const stat = fs.lstatSync(targetPath);
+    targetIsSymlink = stat.isSymbolicLink();
+    targetIsReal = !targetIsSymlink && stat.isDirectory();
+  } catch {}
+
+  if (targetIsReal) {
+    const isEmpty = fs.readdirSync(profileStorage).length === 0;
+    if (isEmpty) {
+      for (const entry of fs.readdirSync(targetPath)) {
+        fs.renameSync(path.join(targetPath, entry), path.join(profileStorage, entry));
+      }
+    }
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  } else if (targetIsSymlink) {
+    fs.unlinkSync(targetPath);
+  }
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.symlinkSync(profileStorage, targetPath);
+}
+
 ipcMain.handle("launch-profile", async (_event, profileId) => {
   const fs = require("fs");
   const home =
@@ -85,6 +130,11 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
   fs.rmSync(esConfigDir, { recursive: true, force: true });
   fs.symlinkSync(profileDir, esConfigDir);
 
+  const { savePaths } = loadAdvancedConfig(home);
+  for (const relativePath of savePaths) {
+    swapSaveSymlink(fs, home, profileId, relativePath);
+  }
+
   esProcess = spawn(esAppImage, [], {
     detached: false,
     stdio: "ignore",
@@ -93,6 +143,28 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
   esProcess.once("exit", () => {
     esProcess = null;
   });
+  return { ok: true };
+});
+
+ipcMain.handle("get-advanced-config", async () => {
+  const home =
+    process.env.HOME ||
+    (() => {
+      throw new Error("HOME environment variable is not set.");
+    })();
+  return loadAdvancedConfig(home);
+});
+
+ipcMain.handle("save-advanced-config", async (_event, config) => {
+  const fs = require("fs");
+  const home =
+    process.env.HOME ||
+    (() => {
+      throw new Error("HOME environment variable is not set.");
+    })();
+  const profilesDir = path.join(home, "es-profiles");
+  fs.mkdirSync(profilesDir, { recursive: true });
+  fs.writeFileSync(getAdvancedConfigPath(home), JSON.stringify(config, null, 2));
   return { ok: true };
 });
 

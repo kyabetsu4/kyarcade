@@ -8,6 +8,7 @@ import {
   type ManageProfileOverlayHandle,
 } from "@/components/arcade/ManageProfileOverlay";
 import { SettingsOverlay, type SettingsOverlayHandle } from "@/components/arcade/SettingsOverlay";
+import { AdvancedOptionsOverlay } from "@/components/arcade/AdvancedOptionsOverlay";
 import { NintendoNotice } from "@/components/arcade/NintendoNotice";
 import { type Profile } from "@/lib/arcade-data";
 import { useArcadeNav } from "@/lib/use-arcade-nav";
@@ -60,6 +61,7 @@ function Index() {
   const [managingMode, setManagingMode] = useState<string>("menu");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsEditing, setSettingsEditing] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { settings, update: updateSettings } = useSettings();
   const focusRef = useRef(0);
@@ -110,7 +112,7 @@ function Index() {
 
   const { focus, setFocus } = useArcadeNav({
     count: items.length,
-    disabled: !!managing || settingsOpen,
+    disabled: !!managing || settingsOpen || advancedOpen,
     onConfirm: (i) => {
       if (managing) return;
       const item = items[i];
@@ -133,24 +135,33 @@ function Index() {
     let raf = 0;
     let lastY = false;
     let lastX = false;
+    let lastCombo = false;
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
+        const anyOpen = !!managing || settingsOpen || advancedOpen;
         const yNow = !!pad.buttons[3]?.pressed;
-        if (yNow && !lastY && !managing && !settingsOpen) {
+        if (yNow && !lastY && !anyOpen) {
           const idx = focusRef.current;
           if (idx < profiles.length) setManaging(profiles[idx]);
         }
         lastY = yNow;
         const xNow = !!pad.buttons[2]?.pressed;
-        if (xNow && !lastX && !managing && !settingsOpen) setSettingsOpen(true);
+        if (xNow && !lastX && !anyOpen) setSettingsOpen(true);
         lastX = xNow;
+        // LT + RT + D-pad right: owner-only combo to open Advanced Options
+        const ltNow = (pad.buttons[6]?.value ?? 0) > 0.5;
+        const rtNow = (pad.buttons[7]?.value ?? 0) > 0.5;
+        const dRightNow = !!pad.buttons[15]?.pressed;
+        const comboNow = ltNow && rtNow && dRightNow;
+        if (comboNow && !lastCombo && !anyOpen) setAdvancedOpen(true);
+        lastCombo = comboNow;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [profiles, managing, settingsOpen]);
+  }, [profiles, managing, settingsOpen, advancedOpen]);
 
   return (
     <ArcadeShell
@@ -297,6 +308,8 @@ function Index() {
           }}
         />
       )}
+
+      {advancedOpen && <AdvancedOptionsOverlay onClose={() => setAdvancedOpen(false)} />}
 
       {managing && (
         <ManageProfileOverlay

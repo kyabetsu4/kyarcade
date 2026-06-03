@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld("arcade", {
   saveProfile: (profile) => ipcRenderer.invoke("save-profile", profile),
   renameProfile: (profileId, newName) => ipcRenderer.invoke("rename-profile", profileId, newName),
   deleteProfile: (profileId) => ipcRenderer.invoke("delete-profile", profileId),
+  getAdvancedConfig: () => ipcRenderer.invoke("get-advanced-config"),
+  saveAdvancedConfig: (config) => ipcRenderer.invoke("save-advanced-config", config),
 });
