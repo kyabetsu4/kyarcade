@@ -68,6 +68,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
               { key: "allowTagline", label: "Allow Set Tagline" },
               { key: "allowAvatar", label: "Allow Change Avatar" },
               { key: "allowDelete", label: "Allow Delete" },
+              { key: "requirePasskeys", label: "Require Profile Passkeys" },
             ] as const
           ).map(({ key, label }) => (
             <button

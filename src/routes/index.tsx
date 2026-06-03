@@ -9,6 +9,7 @@ import {
 } from "@/components/arcade/ManageProfileOverlay";
 import { SettingsOverlay, type SettingsOverlayHandle } from "@/components/arcade/SettingsOverlay";
 import { AdvancedOptionsOverlay } from "@/components/arcade/AdvancedOptionsOverlay";
+import { PasskeyOverlay } from "@/components/arcade/PasskeyOverlay";
 import { NintendoNotice } from "@/components/arcade/NintendoNotice";
 import { type Profile } from "@/lib/arcade-data";
 import { useArcadeNav } from "@/lib/use-arcade-nav";
@@ -68,6 +69,8 @@ function Index() {
   const [settingsEditing, setSettingsEditing] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig>(DEFAULT_ADVANCED_CONFIG);
+  const [passkeyProfile, setPasskeyProfile] = useState<Profile | null>(null);
+  const [passkeyMode, setPasskeyMode] = useState<"set" | "enter">("enter");
   const { theme, setTheme } = useTheme();
   const { settings, update: updateSettings } = useSettings();
   const focusRef = useRef(0);
@@ -100,6 +103,7 @@ function Index() {
             level: 1,
             avatar: p.avatar || null,
             avatarId: p.avatarId,
+            passkey: p.passkey,
             recent: [],
             favorites: [],
           })),
@@ -123,15 +127,29 @@ function Index() {
 
   const items = [...profiles, { id: "__new" }];
 
+  const selectProfile = (profile: Profile) => {
+    if (advancedConfig.requirePasskeys) {
+      if (!profile.passkey || profile.passkey.length === 0) {
+        setPasskeyMode("set");
+        setPasskeyProfile(profile);
+      } else {
+        setPasskeyMode("enter");
+        setPasskeyProfile(profile);
+      }
+    } else {
+      navigate({ to: "/library", search: { profile: profile.id } });
+    }
+  };
+
   const { focus, setFocus } = useArcadeNav({
     count: items.length,
-    disabled: !!managing || settingsOpen || advancedOpen,
+    disabled: !!managing || settingsOpen || advancedOpen || !!passkeyProfile,
     onConfirm: (i) => {
       if (managing) return;
       const item = items[i];
       if (item.id === "__new") navigate({ to: "/new-user" });
       else {
-        navigate({ to: "/library", search: { profile: item.id } });
+        selectProfile(item as Profile);
       }
     },
     onMove: (dir, cur) => {
@@ -152,7 +170,7 @@ function Index() {
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
-        const anyOpen = !!managing || settingsOpen || advancedOpen;
+        const anyOpen = !!managing || settingsOpen || advancedOpen || !!passkeyProfile;
         const yNow = !!pad.buttons[3]?.pressed;
         const canManage =
           advancedConfig.allowRename ||
@@ -179,7 +197,7 @@ function Index() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [profiles, managing, settingsOpen, advancedOpen]);
+  }, [profiles, managing, settingsOpen, advancedOpen, passkeyProfile]);
 
   return (
     <ArcadeShell
@@ -245,7 +263,7 @@ function Index() {
                 onClick={() => {
                   const item = items[focusRef.current];
                   if (item.id === "__new") navigate({ to: "/new-user" });
-                  else navigate({ to: "/library", search: { profile: item.id } });
+                  else selectProfile(item as Profile);
                 }}
               />
               <ButtonHint action="back" label="Back" onClick={() => navigate({ to: "/" })} />
@@ -298,7 +316,7 @@ function Index() {
                 profile={profile}
                 active={focus === i}
                 onHover={() => setFocus(i)}
-                onSelect={() => navigate({ to: "/library", search: { profile: profile.id } })}
+                onSelect={() => selectProfile(profile)}
                 delayMs={i * 80}
               />
             </div>
@@ -339,6 +357,37 @@ function Index() {
             setAdvancedOpen(false);
             loadAdvancedConfig();
           }}
+        />
+      )}
+
+      {passkeyProfile && passkeyMode === "set" && (
+        <PasskeyOverlay
+          mode="set"
+          profileName={passkeyProfile.name}
+          onSet={async (passkey) => {
+            const updated = { ...passkeyProfile, passkey };
+            if (isElectron()) {
+              await window.arcade!.saveProfile(updated);
+            }
+            setProfiles((ps) => ps.map((p) => (p.id === updated.id ? updated : p)));
+            setPasskeyProfile(null);
+            navigate({ to: "/library", search: { profile: passkeyProfile.id } });
+          }}
+          onCancel={() => setPasskeyProfile(null)}
+        />
+      )}
+
+      {passkeyProfile && passkeyMode === "enter" && (
+        <PasskeyOverlay
+          mode="enter"
+          profileName={passkeyProfile.name}
+          passkey={passkeyProfile.passkey!}
+          onSuccess={() => {
+            const id = passkeyProfile.id;
+            setPasskeyProfile(null);
+            navigate({ to: "/library", search: { profile: id } });
+          }}
+          onCancel={() => setPasskeyProfile(null)}
         />
       )}
 

@@ -7,4 +7,5 @@ export type Profile = {
   avatarId?: string;
   recent: string[];
   favorites: string[];
+  passkey?: number[];
 };

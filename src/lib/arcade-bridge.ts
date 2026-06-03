@@ -4,6 +4,7 @@ export interface AdvancedConfig {
   allowAvatar: boolean;
   allowTagline: boolean;
   allowDelete: boolean;
+  requirePasskeys: boolean;
 }
 
 export const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
@@ -12,6 +13,7 @@ export const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
   allowAvatar: true,
   allowTagline: true,
   allowDelete: true,
+  requirePasskeys: false,
 };
 
 export interface ArcadeProfile {
@@ -20,6 +22,7 @@ export interface ArcadeProfile {
   avatar: string | null;
   avatarId?: string;
   tagline: string;
+  passkey?: number[];
 }
 
 declare global {
