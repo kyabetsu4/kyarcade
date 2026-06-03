@@ -24,28 +24,38 @@ function sortedKey(btns: number[]) {
   return [...btns].sort((a, b) => a - b).join(",");
 }
 
-type SetStage = "record" | "confirm" | "done";
+export type PasskeyResult =
+  | { type: "gamepad"; passkey: number[] }
+  | { type: "pin"; pin: string };
+
+type SetStage = "record" | "confirm";
+type InputTab = "gamepad" | "keyboard";
 
 type Props =
-  | { mode: "set"; profileName: string; onSet: (passkey: number[]) => void; onCancel: () => void }
-  | { mode: "enter"; profileName: string; passkey: number[]; onSuccess: () => void; onCancel: () => void };
+  | {
+      mode: "set";
+      profileName: string;
+      onSet: (result: PasskeyResult) => void;
+      onCancel: () => void;
+    }
+  | {
+      mode: "enter";
+      profileName: string;
+      passkey?: number[];
+      pin?: string;
+      onSuccess: () => void;
+      onCancel: () => void;
+    };
 
-export function PasskeyOverlay(props: Props) {
-  const { mode, profileName } = props;
+// ── Gamepad set sub-component ──────────────────────────────────────────────
 
-  // "set" mode state
+function GamepadSetPanel({ onSet }: { onSet: (passkey: number[]) => void }) {
   const [stage, setStage] = useState<SetStage>("record");
   const [recorded, setRecorded] = useState<number[]>([]);
-
-  // shared live held buttons
   const [held, setHeld] = useState<number[]>([]);
-
-  // feedback
-  const [wrong, setWrong] = useState(false);
   const [mismatch, setMismatch] = useState(false);
-
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastHeld = useRef<string>("");
+  const lastHeld = useRef("");
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -55,56 +65,203 @@ export function PasskeyOverlay(props: Props) {
       if (pad) {
         const pressed = getPressedButtons(pad);
         const key = sortedKey(pressed);
-
         if (key !== lastHeld.current) {
           lastHeld.current = key;
           setHeld(pressed);
-
-          if (holdTimer.current) {
-            clearTimeout(holdTimer.current);
-            holdTimer.current = null;
+          if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+          if (pressed.length === 4) {
+            holdTimer.current = setTimeout(() => {
+              setStage((s) => {
+                if (s === "record") {
+                  const sorted = [...pressed].sort((a, b) => a - b);
+                  setRecorded(sorted);
+                  setHeld([]); lastHeld.current = "";
+                  return "confirm";
+                }
+                if (s === "confirm") {
+                  const attempt = [...pressed].sort((a, b) => a - b);
+                  setRecorded((rec) => {
+                    if (attempt.join(",") === rec.join(",")) {
+                      setTimeout(() => onSet(rec), 300);
+                    } else {
+                      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+                      setMismatch(true);
+                      feedbackTimer.current = setTimeout(() => {
+                        setMismatch(false); setHeld([]); lastHeld.current = "";
+                      }, 900);
+                    }
+                    return rec;
+                  });
+                }
+                return s;
+              });
+            }, 800);
           }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    };
+  }, [onSet]);
 
-          if (mode === "set") {
-            if (pressed.length === 4) {
-              holdTimer.current = setTimeout(() => {
-                setStage((s) => {
-                  if (s === "record") {
-                    const sorted = [...pressed].sort((a, b) => a - b);
-                    setRecorded(sorted);
-                    setHeld([]);
-                    lastHeld.current = "";
-                    return "confirm";
-                  }
-                  if (s === "confirm") {
-                    setRecorded((rec) => {
-                      const attempt = [...pressed].sort((a, b) => a - b);
-                      if (attempt.join(",") === rec.join(",")) {
-                        // small delay then fire onSet
-                        setTimeout(() => props.onSet(rec), 400);
-                        return rec;
-                      } else {
-                        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-                        setMismatch(true);
-                        feedbackTimer.current = setTimeout(() => {
-                          setMismatch(false);
-                          setHeld([]);
-                          lastHeld.current = "";
-                        }, 900);
-                        return rec;
-                      }
-                    });
-                    return s;
-                  }
-                  return s;
-                });
-              }, 800);
-            }
-          }
+  const slots =
+    stage === "record"
+      ? Array.from({ length: 4 }, (_, i) => (held[i] !== undefined ? buttonLabel(held[i]) : null))
+      : Array.from({ length: 4 }, (_, i) => (recorded[i] !== undefined ? buttonLabel(recorded[i]) : null));
 
-          if (mode === "enter" && pressed.length === 4) {
+  const isHolding4 = held.length === 4 && !mismatch;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-center font-mono text-sm text-muted-foreground">
+        {stage === "record" ? "Hold any 4 buttons simultaneously" : "Hold the same 4 buttons again to confirm"}
+      </p>
+
+      <div className="flex justify-center gap-3">
+        {slots.map((label, i) => {
+          const active =
+            stage === "record" ? held[i] !== undefined : held[i] !== undefined && held.includes(recorded[i]);
+          return (
+            <div
+              key={i}
+              className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-mono text-lg font-bold transition-all duration-150
+                ${mismatch ? "border-destructive bg-destructive/10 text-destructive" : active ? "border-primary bg-primary/20 text-primary scale-105" : "border-border bg-background text-muted-foreground"}`}
+            >
+              {label ?? "·"}
+            </div>
+          );
+        })}
+      </div>
+
+      {isHolding4 && <p className="text-center font-mono text-sm text-primary animate-pulse">Hold to {stage === "record" ? "record" : "confirm"}…</p>}
+      {mismatch && <p className="text-center font-mono text-sm text-destructive">Doesn't match — try again</p>}
+
+      {stage === "confirm" && (
+        <button type="button" onClick={() => { setStage("record"); setRecorded([]); setHeld([]); lastHeld.current = ""; }}
+          className="rounded-2xl border border-border px-4 py-2 font-mono text-xs text-muted-foreground hover:border-primary/50 transition-colors">
+          ← Start Over
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Keyboard set sub-component ─────────────────────────────────────────────
+
+function KeyboardSetPanel({ onSet }: { onSet: (pin: string) => void }) {
+  const [first, setFirst] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [stage, setStage] = useState<"first" | "confirm">("first");
+  const [mismatch, setMismatch] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, [stage]);
+
+  const submitFirst = () => {
+    if (first.length < 4) return;
+    setStage("confirm");
+  };
+
+  const submitConfirm = () => {
+    if (confirm === first) {
+      onSet(first);
+    } else {
+      setMismatch(true);
+      setConfirm("");
+      setTimeout(() => { setMismatch(false); inputRef.current?.focus(); }, 800);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-center font-mono text-sm text-muted-foreground">
+        {stage === "first" ? "Type a PIN (min 4 characters)" : "Re-enter your PIN to confirm"}
+      </p>
+
+      <input
+        ref={inputRef}
+        type="password"
+        value={stage === "first" ? first : confirm}
+        onChange={(e) => stage === "first" ? setFirst(e.target.value) : setConfirm(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") stage === "first" ? submitFirst() : submitConfirm();
+          if (e.key === "Escape") { /* let parent handle */ }
+        }}
+        placeholder="••••"
+        className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-mono text-xl tracking-[0.5em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
+          ${mismatch ? "border-destructive" : "border-border focus:border-primary"}`}
+      />
+
+      {mismatch && <p className="text-center font-mono text-sm text-destructive">Doesn't match — try again</p>}
+
+      <div className="flex gap-3">
+        {stage === "confirm" && (
+          <button type="button" onClick={() => { setStage("first"); setConfirm(""); }}
+            className="flex-1 rounded-2xl border border-border px-4 py-2 font-mono text-xs text-muted-foreground hover:border-primary/50 transition-colors">
+            ← Back
+          </button>
+        )}
+        <button type="button"
+          onClick={stage === "first" ? submitFirst : submitConfirm}
+          disabled={stage === "first" ? first.length < 4 : confirm.length === 0}
+          className="flex-1 rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-mono text-sm text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          {stage === "first" ? "Next →" : "Confirm"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main overlay ───────────────────────────────────────────────────────────
+
+export function PasskeyOverlay(props: Props) {
+  const { mode, profileName } = props;
+  const [tab, setTab] = useState<InputTab>("gamepad");
+  const [held, setHeld] = useState<number[]>([]);
+  const [wrong, setWrong] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinWrong, setPinWrong] = useState(false);
+  const lastHeld = useRef("");
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinRef = useRef<HTMLInputElement>(null);
+
+  // Determine what enter mode needs
+  const enterNeedsGamepad = mode === "enter" && !!props.passkey?.length;
+  const enterNeedsPin = mode === "enter" && !!props.pin;
+
+  // Auto-select correct tab in enter mode
+  useEffect(() => {
+    if (mode === "enter") {
+      setTab(enterNeedsPin ? "keyboard" : "gamepad");
+    }
+  }, [mode, enterNeedsPin]);
+
+  useEffect(() => {
+    if (mode === "enter" && tab === "keyboard") {
+      setTimeout(() => pinRef.current?.focus(), 50);
+    }
+  }, [mode, tab]);
+
+  // Gamepad polling for enter mode
+  useEffect(() => {
+    if (mode !== "enter" || !enterNeedsGamepad) return;
+    let raf = 0;
+    const tick = () => {
+      const pad = getGamepad();
+      if (pad) {
+        const pressed = getPressedButtons(pad);
+        const key = sortedKey(pressed);
+        if (key !== lastHeld.current) {
+          lastHeld.current = key;
+          setHeld(pressed);
+          if (pressed.length === 4) {
             const attempt = sortedKey(pressed);
-            const target = sortedKey(props.passkey);
+            const target = sortedKey(props.passkey!);
             if (attempt === target) {
               setTimeout(() => props.onSuccess(), 400);
             } else {
@@ -118,12 +275,8 @@ export function PasskeyOverlay(props: Props) {
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      if (holdTimer.current) clearTimeout(holdTimer.current);
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    };
-  }, [mode, props]);
+    return () => { cancelAnimationFrame(raf); if (feedbackTimer.current) clearTimeout(feedbackTimer.current); };
+  }, [mode, enterNeedsGamepad, props]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -133,129 +286,92 @@ export function PasskeyOverlay(props: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [props]);
 
-  // What to show in the 4 slots
-  const slotSource: (string | null)[] =
-    mode === "enter"
-      ? Array(4).fill("?")
-      : stage === "record"
-        ? Array.from({ length: 4 }, (_, i) =>
-            held[i] !== undefined ? buttonLabel(held[i]) : null,
-          )
-        : Array.from({ length: 4 }, (_, i) =>
-            // confirm stage: show recorded keys, highlight matched held buttons
-            recorded[i] !== undefined ? buttonLabel(recorded[i]) : null,
-          );
-
-  const isHoldingInConfirm =
-    mode === "set" && stage === "confirm" && held.length === 4 && !mismatch;
-
-  const borderColor =
-    wrong || mismatch
-      ? "border-destructive"
-      : stage === "done"
-        ? "border-green-500"
-        : "border-primary";
-
-  const subtitle =
-    mode === "enter"
-      ? "Hold your 4-button passkey to unlock"
-      : stage === "record"
-        ? "Hold any 4 buttons simultaneously"
-        : stage === "confirm"
-          ? "Now hold the same 4 buttons again to confirm"
-          : "Passkey set!";
+  const submitPin = () => {
+    if (mode !== "enter") return;
+    if (pinInput === props.pin) {
+      props.onSuccess();
+    } else {
+      setPinWrong(true);
+      setPinInput("");
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(() => { setPinWrong(false); pinRef.current?.focus(); }, 800);
+    }
+  };
 
   const heading =
-    mode === "set"
-      ? stage === "record"
-        ? "Set Passkey"
-        : stage === "confirm"
-          ? "Confirm Passkey"
-          : "Passkey Set!"
-      : "Enter Passkey";
+    mode === "set" ? "Set Passkey" : "Enter Passkey";
+
+  const borderColor = wrong || pinWrong ? "border-destructive" : "border-primary";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md">
-      <div
-        className={`w-full max-w-md rounded-3xl border-2 ${borderColor} bg-card p-10 shadow-2xl flex flex-col gap-8 transition-colors duration-200`}
-      >
+      <div className={`w-full max-w-md rounded-3xl border-2 ${borderColor} bg-card p-10 shadow-2xl flex flex-col gap-6 transition-colors duration-200`}>
+
         <div className="text-center">
-          <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground uppercase">
-            {heading}
-          </p>
+          <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground uppercase">{heading}</p>
           <h2 className="mt-2 font-display text-3xl font-black">{profileName}</h2>
-          <p className="mt-3 font-mono text-sm text-muted-foreground">{subtitle}</p>
         </div>
 
-        <div className="flex justify-center gap-3">
-          {slotSource.map((label, i) => {
-            const isActiveSet =
-              mode === "set" && stage === "record" && held[i] !== undefined;
-            const isMatchedConfirm =
-              mode === "set" &&
-              stage === "confirm" &&
-              held[i] !== undefined &&
-              held.includes(recorded[i]);
-            const active = isActiveSet || isMatchedConfirm;
-
-            return (
-              <div
-                key={i}
-                className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-mono text-lg font-bold transition-all duration-150
-                  ${
-                    wrong || mismatch
-                      ? "border-destructive bg-destructive/10 text-destructive"
-                      : active
-                        ? "border-primary bg-primary/20 text-primary scale-105"
-                        : "border-border bg-background text-muted-foreground"
-                  }`}
-              >
-                {label ?? "·"}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Status messages */}
-        {mode === "set" && stage === "record" && held.length === 4 && (
-          <p className="text-center font-mono text-sm text-primary animate-pulse">
-            Hold to record…
-          </p>
-        )}
-        {mode === "set" && stage === "confirm" && isHoldingInConfirm && (
-          <p className="text-center font-mono text-sm text-primary animate-pulse">
-            Hold to confirm…
-          </p>
-        )}
-        {mismatch && (
-          <p className="text-center font-mono text-sm text-destructive">
-            Doesn't match — try again
-          </p>
-        )}
-        {wrong && (
-          <p className="text-center font-mono text-sm text-destructive">Wrong passkey</p>
+        {/* Tab switcher — set mode always shows both; enter mode only shows if profile has both */}
+        {(mode === "set" || (enterNeedsGamepad && enterNeedsPin)) && (
+          <div className="flex rounded-2xl border border-border overflow-hidden">
+            {(["gamepad", "keyboard"] as InputTab[]).map((t) => (
+              <button key={t} type="button" onClick={() => setTab(t)}
+                className={`flex-1 py-2 font-mono text-sm transition-colors ${tab === t ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+                {t === "gamepad" ? "🎮 Gamepad" : "⌨️ Keyboard"}
+              </button>
+            ))}
+          </div>
         )}
 
-        {mode === "set" && stage === "confirm" && (
-          <button
-            type="button"
-            onClick={() => {
-              setStage("record");
-              setRecorded([]);
-              setHeld([]);
-              lastHeld.current = "";
-            }}
-            className="rounded-2xl border border-border px-6 py-2 font-mono text-xs text-muted-foreground hover:border-primary/50 transition-colors"
-          >
-            ← Start Over
-          </button>
+        {/* Content */}
+        {mode === "set" && tab === "gamepad" && (
+          <GamepadSetPanel onSet={(passkey) => props.onSet({ type: "gamepad", passkey })} />
+        )}
+        {mode === "set" && tab === "keyboard" && (
+          <KeyboardSetPanel onSet={(pin) => props.onSet({ type: "pin", pin })} />
         )}
 
-        <button
-          type="button"
-          onClick={props.onCancel}
-          className="rounded-2xl border border-border px-6 py-3 font-mono text-sm text-foreground hover:border-primary/50 transition-colors"
-        >
+        {mode === "enter" && tab === "gamepad" && (
+          <div className="flex flex-col gap-4">
+            <p className="text-center font-mono text-sm text-muted-foreground">Hold your 4-button passkey to unlock</p>
+            <div className="flex justify-center gap-3">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i}
+                  className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-mono text-lg font-bold transition-all duration-150
+                    ${wrong ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-background text-muted-foreground"}`}>
+                  ?
+                </div>
+              ))}
+            </div>
+            {wrong && <p className="text-center font-mono text-sm text-destructive">Wrong passkey</p>}
+          </div>
+        )}
+
+        {mode === "enter" && tab === "keyboard" && (
+          <div className="flex flex-col gap-4">
+            <p className="text-center font-mono text-sm text-muted-foreground">Enter your PIN to unlock</p>
+            <input
+              ref={pinRef}
+              type="password"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitPin(); }}
+              placeholder="••••"
+              className={`w-full rounded-2xl border-2 bg-background px-5 py-3 text-center font-mono text-xl tracking-[0.5em] text-foreground placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:outline-none transition-colors
+                ${pinWrong ? "border-destructive" : "border-border focus:border-primary"}`}
+            />
+            {pinWrong && <p className="text-center font-mono text-sm text-destructive">Wrong PIN</p>}
+            <button type="button" onClick={submitPin}
+              disabled={pinInput.length === 0}
+              className="rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-mono text-sm text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              Unlock
+            </button>
+          </div>
+        )}
+
+        <button type="button" onClick={props.onCancel}
+          className="rounded-2xl border border-border px-6 py-3 font-mono text-sm text-foreground hover:border-primary/50 transition-colors">
           Cancel
         </button>
       </div>

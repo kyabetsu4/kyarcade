@@ -10,6 +10,7 @@ import {
 import { SettingsOverlay, type SettingsOverlayHandle } from "@/components/arcade/SettingsOverlay";
 import { AdvancedOptionsOverlay } from "@/components/arcade/AdvancedOptionsOverlay";
 import { PasskeyOverlay } from "@/components/arcade/PasskeyOverlay";
+import { PinEntryOverlay } from "@/components/arcade/PinEntryOverlay";
 import { NintendoNotice } from "@/components/arcade/NintendoNotice";
 import { type Profile } from "@/lib/arcade-data";
 import { useArcadeNav } from "@/lib/use-arcade-nav";
@@ -71,6 +72,7 @@ function Index() {
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig>(DEFAULT_ADVANCED_CONFIG);
   const [passkeyProfile, setPasskeyProfile] = useState<Profile | null>(null);
   const [passkeyMode, setPasskeyMode] = useState<"set" | "enter">("enter");
+  const [advancedPinOpen, setAdvancedPinOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { settings, update: updateSettings } = useSettings();
   const focusRef = useRef(0);
@@ -104,6 +106,7 @@ function Index() {
             avatar: p.avatar || null,
             avatarId: p.avatarId,
             passkey: p.passkey,
+            pin: p.pin,
             recent: [],
             favorites: [],
           })),
@@ -129,7 +132,9 @@ function Index() {
 
   const selectProfile = (profile: Profile) => {
     if (advancedConfig.requirePasskeys) {
-      if (!profile.passkey || profile.passkey.length === 0) {
+      const hasPasskey = profile.passkey && profile.passkey.length > 0;
+      const hasPin = !!profile.pin;
+      if (!hasPasskey && !hasPin) {
         setPasskeyMode("set");
         setPasskeyProfile(profile);
       } else {
@@ -141,9 +146,17 @@ function Index() {
     }
   };
 
+  const openAdvanced = () => {
+    if (advancedConfig.advancedPasscode) {
+      setAdvancedPinOpen(true);
+    } else {
+      openAdvanced();
+    }
+  };
+
   const { focus, setFocus } = useArcadeNav({
     count: items.length,
-    disabled: !!managing || settingsOpen || advancedOpen || !!passkeyProfile,
+    disabled: !!managing || settingsOpen || advancedOpen || !!passkeyProfile || advancedPinOpen,
     onConfirm: (i) => {
       if (managing) return;
       const item = items[i];
@@ -170,7 +183,7 @@ function Index() {
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
-        const anyOpen = !!managing || settingsOpen || advancedOpen || !!passkeyProfile;
+        const anyOpen = !!managing || settingsOpen || advancedOpen || !!passkeyProfile || advancedPinOpen;
         const yNow = !!pad.buttons[3]?.pressed;
         const canManage =
           advancedConfig.allowRename ||
@@ -190,20 +203,20 @@ function Index() {
         const rtNow = (pad.buttons[7]?.value ?? 0) > 0.5;
         const dRightNow = !!pad.buttons[15]?.pressed;
         const comboNow = ltNow && rtNow && dRightNow;
-        if (comboNow && !lastCombo && !anyOpen) setAdvancedOpen(true);
+        if (comboNow && !lastCombo && !anyOpen) openAdvanced();
         lastCombo = comboNow;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [profiles, managing, settingsOpen, advancedOpen, passkeyProfile]);
+  }, [profiles, managing, settingsOpen, advancedOpen, passkeyProfile, advancedPinOpen]);
 
   return (
     <ArcadeShell
       title="Select Player"
       showCredits={settings.showCredits}
-      onAdvanced={() => setAdvancedOpen(true)}
+      onAdvanced={() => openAdvanced()}
       footer={
         <div className="flex w-full items-center justify-center gap-12">
           {settingsOpen ? (
@@ -364,8 +377,12 @@ function Index() {
         <PasskeyOverlay
           mode="set"
           profileName={passkeyProfile.name}
-          onSet={async (passkey) => {
-            const updated = { ...passkeyProfile, passkey };
+          onSet={async (result) => {
+            const updated = {
+              ...passkeyProfile,
+              passkey: result.type === "gamepad" ? result.passkey : undefined,
+              pin: result.type === "pin" ? result.pin : undefined,
+            };
             if (isElectron()) {
               await window.arcade!.saveProfile(updated);
             }
@@ -381,13 +398,23 @@ function Index() {
         <PasskeyOverlay
           mode="enter"
           profileName={passkeyProfile.name}
-          passkey={passkeyProfile.passkey!}
+          passkey={passkeyProfile.passkey}
+          pin={passkeyProfile.pin}
           onSuccess={() => {
             const id = passkeyProfile.id;
             setPasskeyProfile(null);
             navigate({ to: "/library", search: { profile: id } });
           }}
           onCancel={() => setPasskeyProfile(null)}
+        />
+      )}
+
+      {advancedPinOpen && (
+        <PinEntryOverlay
+          title="Advanced Options"
+          onSuccess={() => { setAdvancedPinOpen(false); setAdvancedOpen(true); }}
+          onCancel={() => setAdvancedPinOpen(false)}
+          check={(pin) => pin === advancedConfig.advancedPasscode}
         />
       )}
 

@@ -9,6 +9,7 @@ type Props = {
 export function AdvancedOptionsOverlay({ onClose }: Props) {
   const [config, setConfig] = useState<AdvancedConfig>(DEFAULT_ADVANCED_CONFIG);
   const [newPath, setNewPath] = useState("");
+  const [newPasscode, setNewPasscode] = useState("");
   const [saved, setSaved] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,7 +42,13 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
   };
 
   const save = async () => {
-    if (isElectron()) await window.arcade!.saveAdvancedConfig(config);
+    const toSave: AdvancedConfig = {
+      ...config,
+      ...(newPasscode.trim() ? { advancedPasscode: newPasscode.trim() } : {}),
+    };
+    if (isElectron()) await window.arcade!.saveAdvancedConfig(toSave);
+    setConfig(toSave);
+    setNewPasscode("");
     setSaved(true);
   };
 
@@ -90,6 +97,33 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
               </div>
             </button>
           ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
+            Admin Passcode
+            <span className="ml-2 normal-case tracking-normal">
+              — required to open Advanced Options
+            </span>
+          </p>
+          <div className="flex gap-2 items-center">
+            <input
+              type="password"
+              value={newPasscode}
+              onChange={(e) => { setNewPasscode(e.target.value); setSaved(false); }}
+              placeholder={config.advancedPasscode ? "••••  (set — type to change)" : "Leave blank to disable"}
+              className="flex-1 rounded-2xl border border-border bg-background px-5 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            />
+            {config.advancedPasscode && (
+              <button
+                type="button"
+                onClick={() => { setConfig((c) => ({ ...c, advancedPasscode: undefined })); setNewPasscode(""); setSaved(false); }}
+                className="rounded-2xl border border-destructive/40 px-3 py-3 font-mono text-xs text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">

@@ -8,4 +8,5 @@ export type Profile = {
   recent: string[];
   favorites: string[];
   passkey?: number[];
+  pin?: string;
 };
