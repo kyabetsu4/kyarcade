@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kyarcade</title>
+    <meta
+      name="description"
+      content="Retro Arcade Select — a custom profile selector front-end for Batocera."
+    />
+    <script>
+      // Restore path rewritten by 404.html for GitHub Pages SPA routing
+      (function () {
+        var p = window.location.search
+          .slice(1)
+          .split("&")
+          .find(function (s) {
+            return s.startsWith("p=/");
+          });
+        if (p) {
+          var path = p.slice(2).replace(/~and~/g, "&");
+          var q = window.location.search
+            .slice(1)
+            .split("&")
+            .filter(function (s) {
+              return s !== p;
+            })
+            .join("&");
+          window.history.replaceState(null, null, path + (q ? "?" + q : "") + window.location.hash);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
