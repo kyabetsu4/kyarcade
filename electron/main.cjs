@@ -21,14 +21,11 @@ function createWindow() {
   });
 
   if (isDev) {
-    // Vite dev server (npm run electron:dev)
     win.loadURL(`http://localhost:${VITE_PORT}`);
   } else {
-    // Production / packaged AppImage: load the built bundle from disk.
     win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
 
-  // Block navigation to any external origin; internal routing uses hash history.
   win.webContents.on("will-navigate", (e, url) => {
     const allowed = isDev ? `http://localhost:${VITE_PORT}` : "file://";
     if (!url.startsWith(allowed)) e.preventDefault();

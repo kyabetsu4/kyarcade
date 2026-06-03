@@ -3,25 +3,7 @@ import { OnScreenKeyboard } from "./OnScreenKeyboard";
 import { isElectron, getGamepad } from "@/lib/arcade-bridge";
 import { AVATAR_GRADIENTS } from "@/lib/avatar-colors";
 import type { Profile } from "@/lib/arcade-data";
-import { avatarUrl } from "@/lib/avatars";
-const DEFAULT_AVATARS = [
-  { id: "broccoli", url: avatarUrl("1F966") },
-  { id: "carrot", url: avatarUrl("1F955") },
-  { id: "corn", url: avatarUrl("1F33D") },
-  { id: "eggplant", url: avatarUrl("1F346") },
-  { id: "mushroom", url: avatarUrl("1F344") },
-  { id: "pepper", url: avatarUrl("1F336") },
-  { id: "potato", url: avatarUrl("1F954") },
-  { id: "tomato", url: avatarUrl("1F345") },
-  { id: "cabbage", url: avatarUrl("1F96C") },
-  { id: "avocado", url: avatarUrl("1F951") },
-  { id: "cucumber", url: avatarUrl("1F952") },
-  { id: "onion", url: avatarUrl("1F9C5") },
-  { id: "garlic", url: avatarUrl("1F9C4") },
-  { id: "peanuts", url: avatarUrl("1F95C") },
-  { id: "chestnut", url: avatarUrl("1F330") },
-  { id: "blueberries", url: avatarUrl("1FAD0") },
-];
+import { DEFAULT_AVATARS } from "@/lib/avatars";
 
 type Mode = "menu" | "rename" | "tagline" | "avatar" | "confirm-delete";
 

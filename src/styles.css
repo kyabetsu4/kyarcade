@@ -86,8 +86,6 @@ html {
   --ring: oklch(0.75 0.12 220);
 }
 
-/* ── Themes ─────────────────────────────────────────────── */
-
 .theme-dark {
   --background: oklch(0.2 0.02 260);
   --foreground: oklch(0.98 0 0);
