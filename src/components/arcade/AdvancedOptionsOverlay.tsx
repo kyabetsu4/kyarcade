@@ -55,14 +55,49 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
       <div className="w-full max-w-xl rounded-3xl border-2 border-primary bg-card p-10 shadow-2xl flex flex-col gap-6">
         <div className="text-center">
           <p className="font-mono text-xs tracking-[0.3em] text-muted-foreground">Advanced</p>
-          <h2 className="mt-2 font-display text-3xl font-black">Save Paths</h2>
-          <p className="mt-2 font-mono text-xs text-muted-foreground">
-            Paths are relative to <span className="text-foreground">$HOME</span>. Each is symlinked
-            per-profile on launch.
-          </p>
+          <h2 className="mt-2 font-display text-3xl font-black">Advanced Options</h2>
         </div>
 
         <div className="flex flex-col gap-2">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
+            Profile Modifications
+          </p>
+          {(
+            [
+              { key: "allowRename", label: "Allow Rename" },
+              { key: "allowTagline", label: "Allow Set Tagline" },
+              { key: "allowAvatar", label: "Allow Change Avatar" },
+              { key: "allowDelete", label: "Allow Delete" },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setConfig((c) => ({ ...c, [key]: !c[key] }));
+                setSaved(false);
+              }}
+              className="flex items-center justify-between rounded-2xl border border-border bg-background px-5 py-3 hover:border-primary/50 transition-colors"
+            >
+              <span className="font-mono text-sm text-foreground">{label}</span>
+              <div
+                className={`relative h-6 w-10 rounded-full transition-colors ${config[key] ? "bg-primary" : "bg-border"}`}
+              >
+                <div
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${config[key] ? "translate-x-4" : "translate-x-0.5"}`}
+                />
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
+            Save Paths
+            <span className="ml-2 normal-case tracking-normal">
+              — relative to $HOME, symlinked per profile
+            </span>
+          </p>
           {config.savePaths.length === 0 && (
             <p className="text-center font-mono text-sm text-muted-foreground py-4">
               No paths configured.

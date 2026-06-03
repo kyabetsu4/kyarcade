@@ -1,9 +1,17 @@
 export interface AdvancedConfig {
   savePaths: string[];
+  allowRename: boolean;
+  allowAvatar: boolean;
+  allowTagline: boolean;
+  allowDelete: boolean;
 }
 
 export const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
   savePaths: ["Emulation/saves", "Emulation/states"],
+  allowRename: true,
+  allowAvatar: true,
+  allowTagline: true,
+  allowDelete: true,
 };
 
 export interface ArcadeProfile {

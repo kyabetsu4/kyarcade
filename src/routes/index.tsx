@@ -12,7 +12,12 @@ import { AdvancedOptionsOverlay } from "@/components/arcade/AdvancedOptionsOverl
 import { NintendoNotice } from "@/components/arcade/NintendoNotice";
 import { type Profile } from "@/lib/arcade-data";
 import { useArcadeNav } from "@/lib/use-arcade-nav";
-import { isElectron, getGamepad } from "@/lib/arcade-bridge";
+import {
+  isElectron,
+  getGamepad,
+  DEFAULT_ADVANCED_CONFIG,
+  type AdvancedConfig,
+} from "@/lib/arcade-bridge";
 import { useTheme } from "@/lib/use-theme";
 import { useSettings } from "@/lib/use-settings";
 import { avatarUrl } from "@/lib/avatars";
@@ -62,6 +67,7 @@ function Index() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsEditing, setSettingsEditing] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig>(DEFAULT_ADVANCED_CONFIG);
   const { theme, setTheme } = useTheme();
   const { settings, update: updateSettings } = useSettings();
   const focusRef = useRef(0);
@@ -104,8 +110,15 @@ function Index() {
     }
   };
 
+  const loadAdvancedConfig = () => {
+    if (isElectron()) {
+      window.arcade!.getAdvancedConfig().then(setAdvancedConfig);
+    }
+  };
+
   useEffect(() => {
     loadProfiles();
+    loadAdvancedConfig();
   }, []);
 
   const items = [...profiles, { id: "__new" }];
@@ -310,12 +323,20 @@ function Index() {
         />
       )}
 
-      {advancedOpen && <AdvancedOptionsOverlay onClose={() => setAdvancedOpen(false)} />}
+      {advancedOpen && (
+        <AdvancedOptionsOverlay
+          onClose={() => {
+            setAdvancedOpen(false);
+            loadAdvancedConfig();
+          }}
+        />
+      )}
 
       {managing && (
         <ManageProfileOverlay
           ref={managingRef}
           profile={managing}
+          permissions={advancedConfig}
           onModeChange={setManagingMode}
           onClose={() => {
             setManaging(null);

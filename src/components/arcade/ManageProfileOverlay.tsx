@@ -7,8 +7,23 @@ import { DEFAULT_AVATARS } from "@/lib/avatars";
 
 type Mode = "menu" | "rename" | "tagline" | "avatar" | "confirm-delete";
 
+type Permissions = {
+  allowRename: boolean;
+  allowAvatar: boolean;
+  allowTagline: boolean;
+  allowDelete: boolean;
+};
+
+const ALL_ALLOWED: Permissions = {
+  allowRename: true,
+  allowAvatar: true,
+  allowTagline: true,
+  allowDelete: true,
+};
+
 type Props = {
   profile: Profile;
+  permissions?: Permissions;
   onClose: () => void;
   onRenamed: (id: string, newName: string) => void;
   onDeleted: (id: string) => void;
@@ -27,6 +42,7 @@ export const ManageProfileOverlay = forwardRef<ManageProfileOverlayHandle, Props
   function ManageProfileOverlay(
     {
       profile,
+      permissions = ALL_ALLOWED,
       onClose,
       onRenamed,
       onDeleted,
@@ -50,7 +66,13 @@ export const ManageProfileOverlay = forwardRef<ManageProfileOverlayHandle, Props
     confirmDeleteIndexRef.current = confirmDeleteIndex;
     const [replaceOnType, setReplaceOnType] = useState(false);
     const replaceOnTypeRef = useRef(false);
-    const MENU = ["Rename", "Set Tagline", "Change Avatar", "Delete", "Cancel"];
+    const MENU = [
+      ...(permissions.allowRename ? ["Rename"] : []),
+      ...(permissions.allowTagline ? ["Set Tagline"] : []),
+      ...(permissions.allowAvatar ? ["Change Avatar"] : []),
+      ...(permissions.allowDelete ? ["Delete"] : []),
+      "Cancel",
+    ];
     const menuIndexRef = useRef(menuIndex);
     const modeRef = useRef(mode);
     const handleConfirmRef = useRef<() => void>(() => {});
