@@ -14,19 +14,23 @@ export function PinEntryOverlay({ title, subtitle, onSuccess, onCancel, check }:
   const [wrong, setWrong] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastB = useRef(false);
+  const lastB = useRef<number | null>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  // B button to cancel
+  // Hold B to cancel
   useEffect(() => {
     let raf = 0;
-    const tick = () => {
+    const HOLD_MS = 1000;
+    const tick = (now: number) => {
       const pad = getGamepad();
       if (pad) {
-        const bNow = !!pad.buttons[1]?.pressed;
-        if (bNow && !lastB.current) onCancel();
-        lastB.current = bNow;
+        if (pad.buttons[1]?.pressed) {
+          if (lastB.current === null) lastB.current = now;
+          else if (now - lastB.current >= HOLD_MS) { onCancel(); return; }
+        } else {
+          lastB.current = null;
+        }
       }
       raf = requestAnimationFrame(tick);
     };

@@ -54,6 +54,8 @@ function GamepadSetPanel({ onSet, onCancel }: { onSet: (passkey: number[]) => vo
   const [mismatch, setMismatch] = useState(false);
   const prevPressed = useRef<Set<number>>(new Set());
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bHeldSince = useRef<number | null>(null);
+  const HOLD_MS = 1000;
   // Track stage + recorded in refs for use inside RAF
   const stageRef = useRef<SetStage>("record");
   const recordedRef = useRef<number[]>([]);
@@ -63,29 +65,26 @@ function GamepadSetPanel({ onSet, onCancel }: { onSet: (passkey: number[]) => vo
 
   useEffect(() => {
     let raf = 0;
-    const tick = () => {
+    const tick = (now: number) => {
       const pad = getGamepad();
       if (pad) {
         const cur = getPressedSet(pad);
         const prev = prevPressed.current;
 
-        // Find newly pressed buttons this frame
+        // Hold B to cancel
+        if (cur.has(1)) {
+          if (bHeldSince.current === null) bHeldSince.current = now;
+          else if (now - bHeldSince.current >= HOLD_MS) { onCancel(); return; }
+        } else {
+          bHeldSince.current = null;
+        }
+
+        // Find newly pressed buttons this frame (excluding B which is hold-only)
         const newlyPressed: number[] = [];
-        cur.forEach((idx) => { if (!prev.has(idx)) newlyPressed.push(idx); });
+        cur.forEach((idx) => { if (idx !== 1 && !prev.has(idx)) newlyPressed.push(idx); });
 
         for (const btn of newlyPressed) {
-          if (btn === 1) {
-            // B = backspace in record, cancel in confirm/empty
-            if (stageRef.current === "record") {
-              setSequence((seq) => {
-                if (seq.length === 0) { onCancel(); return seq; }
-                return seq.slice(0, -1);
-              });
-            } else {
-              // in confirm stage, B resets confirm attempt
-              setSequence([]);
-            }
-          } else if (stageRef.current === "record") {
+          if (stageRef.current === "record") {
             setSequence((seq) => {
               if (seq.length >= 4) return seq; // full, ignore until Next
               return [...seq, btn];
@@ -221,24 +220,29 @@ function GamepadEnterPanel({
   const [wrong, setWrong] = useState(false);
   const prevPressed = useRef<Set<number>>(new Set());
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bHeldSince = useRef<number | null>(null);
+  const HOLD_MS = 1000;
 
   useEffect(() => {
     let raf = 0;
-    const tick = () => {
+    const tick = (now: number) => {
       const pad = getGamepad();
       if (pad) {
         const cur = getPressedSet(pad);
         const prev = prevPressed.current;
 
+        // Hold B to cancel
+        if (cur.has(1)) {
+          if (bHeldSince.current === null) bHeldSince.current = now;
+          else if (now - bHeldSince.current >= HOLD_MS) { onCancel(); return; }
+        } else {
+          bHeldSince.current = null;
+        }
+
         const newlyPressed: number[] = [];
-        cur.forEach((idx) => { if (!prev.has(idx)) newlyPressed.push(idx); });
+        cur.forEach((idx) => { if (idx !== 1 && !prev.has(idx)) newlyPressed.push(idx); });
 
         for (const btn of newlyPressed) {
-          if (btn === 1) {
-            // B = cancel
-            onCancel();
-            break;
-          }
           setSequence((seq) => {
             const pos = seq.length;
             if (btn !== passkey[pos]) {
@@ -374,7 +378,6 @@ export function PasskeyOverlay(props: Props) {
   const [tab, setTab] = useState<InputTab>("gamepad");
   const [pinInput, setPinInput] = useState("");
   const [pinWrong, setPinWrong] = useState(false);
-  const lastB = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinRef = useRef<HTMLInputElement>(null);
 
@@ -389,16 +392,21 @@ export function PasskeyOverlay(props: Props) {
     if (mode === "enter" && tab === "keyboard") setTimeout(() => pinRef.current?.focus(), 50);
   }, [mode, tab]);
 
-  // B to cancel for keyboard-only enter mode
+  // Hold B to cancel for keyboard-only enter mode
   useEffect(() => {
     if (mode !== "enter" || enterNeedsGamepad) return;
     let raf = 0;
-    const tick = () => {
+    const bHeldSince: { current: number | null } = { current: null };
+    const HOLD_MS = 1000;
+    const tick = (now: number) => {
       const pad = getGamepad();
       if (pad) {
-        const bNow = !!pad.buttons[1]?.pressed;
-        if (bNow && !lastB.current) props.onCancel();
-        lastB.current = bNow;
+        if (pad.buttons[1]?.pressed) {
+          if (bHeldSince.current === null) bHeldSince.current = now;
+          else if (now - bHeldSince.current >= HOLD_MS) { props.onCancel(); return; }
+        } else {
+          bHeldSince.current = null;
+        }
       }
       raf = requestAnimationFrame(tick);
     };

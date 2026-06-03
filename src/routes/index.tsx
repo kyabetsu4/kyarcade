@@ -219,7 +219,9 @@ function Index() {
       onAdvanced={() => openAdvanced()}
       footer={
         <div className="flex w-full items-center justify-center gap-12">
-          {(passkeyProfile || advancedPinOpen) ? null : settingsOpen ? (
+          {(passkeyProfile || advancedPinOpen) ? (
+            <ButtonHint action="back" glyph="B" label="Hold to Cancel" />
+          ) : settingsOpen ? (
             settingsEditing ? (
               <>
                 <ButtonHint
