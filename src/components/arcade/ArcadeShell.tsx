@@ -43,9 +43,9 @@ export function ArcadeShell({
               tabIndex={-1}
               onClick={onAdvanced}
               aria-label="Advanced options"
-              className="rounded-xl px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-transparent hover:text-muted-foreground/40 transition-colors select-none"
+              className="font-display text-5xl font-black leading-none text-muted-foreground/40 hover:text-muted-foreground transition-colors select-none"
             >
-              ···
+              ⚙
             </button>
           )}
           <Clock />
