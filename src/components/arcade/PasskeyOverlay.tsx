@@ -13,15 +13,13 @@ function buttonLabel(idx: number) {
   return BUTTON_LABELS[idx] ?? `Btn${idx}`;
 }
 
-function getPressedButtons(pad: Gamepad): number[] {
-  return pad.buttons
-    .map((b, i) => ({ pressed: b.value > 0.5, i }))
-    .filter((x) => x.pressed)
-    .map((x) => x.i);
-}
-
-function sortedKey(btns: number[]) {
-  return [...btns].sort((a, b) => a - b).join(",");
+function getPressedSet(pad: Gamepad): Set<number> {
+  return new Set(
+    pad.buttons
+      .map((b, i) => ({ pressed: b.value > 0.5, i }))
+      .filter((x) => x.pressed)
+      .map((x) => x.i),
+  );
 }
 
 export type PasskeyResult =
@@ -52,91 +50,116 @@ type Props =
 function GamepadSetPanel({ onSet, onCancel }: { onSet: (passkey: number[]) => void; onCancel: () => void }) {
   const [stage, setStage] = useState<SetStage>("record");
   const [recorded, setRecorded] = useState<number[]>([]);
-  const [held, setHeld] = useState<number[]>([]);
+  const [sequence, setSequence] = useState<number[]>([]); // current input (record or confirm attempt)
   const [mismatch, setMismatch] = useState(false);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastHeld = useRef("");
-  const lastB = useRef(false);
+  const prevPressed = useRef<Set<number>>(new Set());
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track stage + recorded in refs for use inside RAF
+  const stageRef = useRef<SetStage>("record");
+  const recordedRef = useRef<number[]>([]);
+
+  useEffect(() => { stageRef.current = stage; }, [stage]);
+  useEffect(() => { recordedRef.current = recorded; }, [recorded]);
 
   useEffect(() => {
     let raf = 0;
     const tick = () => {
       const pad = getGamepad();
       if (pad) {
-        // B to cancel
-        const bNow = !!pad.buttons[1]?.pressed;
-        if (bNow && !lastB.current) onCancel();
-        lastB.current = bNow;
+        const cur = getPressedSet(pad);
+        const prev = prevPressed.current;
 
-        const pressed = getPressedButtons(pad);
-        const key = sortedKey(pressed);
-        if (key !== lastHeld.current) {
-          lastHeld.current = key;
-          setHeld(pressed);
-          if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
-          if (pressed.length === 4) {
-            holdTimer.current = setTimeout(() => {
-              setStage((s) => {
-                if (s === "record") {
-                  const sorted = [...pressed].sort((a, b) => a - b);
-                  setRecorded(sorted);
-                  setHeld([]); lastHeld.current = "";
-                  return "confirm";
-                }
-                if (s === "confirm") {
-                  const attempt = [...pressed].sort((a, b) => a - b);
-                  setRecorded((rec) => {
-                    if (attempt.join(",") === rec.join(",")) {
-                      setTimeout(() => onSet(rec), 300);
-                    } else {
-                      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-                      setMismatch(true);
-                      feedbackTimer.current = setTimeout(() => {
-                        setMismatch(false); setHeld([]); lastHeld.current = "";
-                      }, 900);
-                    }
-                    return rec;
-                  });
-                }
-                return s;
+        // Find newly pressed buttons this frame
+        const newlyPressed: number[] = [];
+        cur.forEach((idx) => { if (!prev.has(idx)) newlyPressed.push(idx); });
+
+        for (const btn of newlyPressed) {
+          if (btn === 1) {
+            // B = backspace in record, cancel in confirm/empty
+            if (stageRef.current === "record") {
+              setSequence((seq) => {
+                if (seq.length === 0) { onCancel(); return seq; }
+                return seq.slice(0, -1);
               });
-            }, 800);
+            } else {
+              // in confirm stage, B resets confirm attempt
+              setSequence([]);
+            }
+          } else if (stageRef.current === "record") {
+            setSequence((seq) => {
+              if (seq.length >= 4) return seq; // full, ignore until Next
+              return [...seq, btn];
+            });
+          } else {
+            // confirm stage: check each press against expected
+            setSequence((seq) => {
+              const next = [...seq, btn];
+              const pos = seq.length;
+              if (btn !== recordedRef.current[pos]) {
+                // wrong button
+                if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+                setMismatch(true);
+                feedbackTimer.current = setTimeout(() => {
+                  setMismatch(false);
+                }, 900);
+                return []; // reset attempt
+              }
+              if (next.length === 4) {
+                // all 4 correct
+                setTimeout(() => onSet(recordedRef.current), 300);
+              }
+              return next;
+            });
           }
         }
+
+        prevPressed.current = cur;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
-      if (holdTimer.current) clearTimeout(holdTimer.current);
       if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
     };
   }, [onSet, onCancel]);
 
-  const slots =
-    stage === "record"
-      ? Array.from({ length: 4 }, (_, i) => (held[i] !== undefined ? buttonLabel(held[i]) : null))
-      : Array.from({ length: 4 }, (_, i) => (recorded[i] !== undefined ? buttonLabel(recorded[i]) : null));
+  const advanceToConfirm = () => {
+    if (sequence.length < 4) return;
+    setRecorded(sequence);
+    recordedRef.current = sequence;
+    setSequence([]);
+    setStage("record"); // reset stage ref via useEffect
+    // set stage to confirm after state flush
+    setTimeout(() => setStage("confirm"), 0);
+  };
 
-  const isHolding4 = held.length === 4 && !mismatch;
+  const slots = Array.from({ length: 4 }, (_, i) => sequence[i] !== undefined ? buttonLabel(sequence[i]) : null);
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-center font-mono text-sm text-muted-foreground">
-        {stage === "record" ? "Hold any 4 buttons simultaneously" : "Hold the same 4 buttons again to confirm"}
+        {stage === "record"
+          ? "Press 4 buttons in order  •  B to undo"
+          : "Press the same 4 buttons again to confirm"}
       </p>
 
       <div className="flex justify-center gap-3">
         {slots.map((label, i) => {
-          const active =
-            stage === "record" ? held[i] !== undefined : held[i] !== undefined && held.includes(recorded[i]);
+          const filled = sequence[i] !== undefined;
+          const isNext = i === sequence.length && stage === "confirm"; // next expected slot
           return (
             <div
               key={i}
               className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-display text-lg font-bold transition-all duration-150
-                ${mismatch ? "border-destructive bg-destructive/10 text-destructive" : active ? "border-primary bg-primary/20 text-primary scale-105" : "border-border bg-background text-muted-foreground"}`}
+                ${mismatch && stage === "confirm"
+                  ? "border-destructive bg-destructive/10 text-destructive"
+                  : filled
+                    ? "border-primary bg-primary/20 text-primary scale-105"
+                    : isNext
+                      ? "border-primary/50 bg-background text-muted-foreground animate-pulse"
+                      : "border-border bg-background text-muted-foreground"
+                }`}
             >
               {label ?? "·"}
             </div>
@@ -144,22 +167,132 @@ function GamepadSetPanel({ onSet, onCancel }: { onSet: (passkey: number[]) => vo
         })}
       </div>
 
-      {isHolding4 && (
-        <p className="text-center font-mono text-sm text-primary animate-pulse">
-          Hold to {stage === "record" ? "record" : "confirm"}…
-        </p>
+      {mismatch && (
+        <p className="text-center font-mono text-sm text-destructive">Wrong button — try again</p>
       )}
-      {mismatch && <p className="text-center font-mono text-sm text-destructive">Doesn't match — try again</p>}
+
+      {stage === "record" && (
+        <div className="flex gap-3">
+          {sequence.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSequence((s) => s.slice(0, -1))}
+              className="rounded-2xl border border-border px-4 py-2 font-display text-sm font-bold text-muted-foreground hover:border-primary/50 transition-colors"
+            >
+              ← Undo
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={advanceToConfirm}
+            disabled={sequence.length < 4}
+            className="flex-1 rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-display text-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Next →
+          </button>
+        </div>
+      )}
 
       {stage === "confirm" && (
         <button
           type="button"
-          onClick={() => { setStage("record"); setRecorded([]); setHeld([]); lastHeld.current = ""; }}
+          onClick={() => { setStage("record"); setRecorded([]); setSequence([]); }}
           className="rounded-2xl border border-border px-4 py-2 font-display text-sm font-bold text-muted-foreground hover:border-primary/50 transition-colors"
         >
           ← Start Over
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Gamepad enter sub-component ─────────────────────────────────────────────
+
+function GamepadEnterPanel({
+  passkey,
+  onSuccess,
+  onCancel,
+}: {
+  passkey: number[];
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [sequence, setSequence] = useState<number[]>([]);
+  const [wrong, setWrong] = useState(false);
+  const prevPressed = useRef<Set<number>>(new Set());
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const pad = getGamepad();
+      if (pad) {
+        const cur = getPressedSet(pad);
+        const prev = prevPressed.current;
+
+        const newlyPressed: number[] = [];
+        cur.forEach((idx) => { if (!prev.has(idx)) newlyPressed.push(idx); });
+
+        for (const btn of newlyPressed) {
+          if (btn === 1) {
+            // B = cancel
+            onCancel();
+            break;
+          }
+          setSequence((seq) => {
+            const pos = seq.length;
+            if (btn !== passkey[pos]) {
+              if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+              setWrong(true);
+              feedbackTimer.current = setTimeout(() => setWrong(false), 800);
+              return []; // reset
+            }
+            const next = [...seq, btn];
+            if (next.length === 4) {
+              setTimeout(() => onSuccess(), 300);
+            }
+            return next;
+          });
+        }
+
+        prevPressed.current = cur;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); if (feedbackTimer.current) clearTimeout(feedbackTimer.current); };
+  }, [passkey, onSuccess, onCancel]);
+
+  const slots = Array.from({ length: 4 }, (_, i) => (sequence[i] !== undefined ? "●" : null));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-center font-mono text-sm text-muted-foreground">
+        Press your 4-button passkey in order
+      </p>
+      <div className="flex justify-center gap-3">
+        {slots.map((label, i) => {
+          const filled = sequence[i] !== undefined;
+          const isNext = i === sequence.length;
+          return (
+            <div
+              key={i}
+              className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-display text-2xl font-bold transition-all duration-150
+                ${wrong
+                  ? "border-destructive bg-destructive/10 text-destructive"
+                  : filled
+                    ? "border-primary bg-primary/20 text-primary scale-105"
+                    : isNext
+                      ? "border-primary/40 bg-background text-muted-foreground animate-pulse"
+                      : "border-border bg-background text-muted-foreground"
+                }`}
+            >
+              {label ?? "·"}
+            </div>
+          );
+        })}
+      </div>
+      {wrong && <p className="text-center font-mono text-sm text-destructive">Wrong passkey</p>}
     </div>
   );
 }
@@ -239,11 +372,8 @@ function KeyboardSetPanel({ onSet }: { onSet: (pin: string) => void }) {
 export function PasskeyOverlay(props: Props) {
   const { mode, profileName } = props;
   const [tab, setTab] = useState<InputTab>("gamepad");
-  const [held, setHeld] = useState<number[]>([]);
-  const [wrong, setWrong] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinWrong, setPinWrong] = useState(false);
-  const lastHeld = useRef("");
   const lastB = useRef(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinRef = useRef<HTMLInputElement>(null);
@@ -259,42 +389,7 @@ export function PasskeyOverlay(props: Props) {
     if (mode === "enter" && tab === "keyboard") setTimeout(() => pinRef.current?.focus(), 50);
   }, [mode, tab]);
 
-  // Gamepad polling for enter mode (+ B to cancel)
-  useEffect(() => {
-    if (mode !== "enter" || !enterNeedsGamepad) return;
-    let raf = 0;
-    const tick = () => {
-      const pad = getGamepad();
-      if (pad) {
-        const bNow = !!pad.buttons[1]?.pressed;
-        if (bNow && !lastB.current) props.onCancel();
-        lastB.current = bNow;
-
-        const pressed = getPressedButtons(pad);
-        const key = sortedKey(pressed);
-        if (key !== lastHeld.current) {
-          lastHeld.current = key;
-          setHeld(pressed);
-          if (pressed.length === 4) {
-            const attempt = sortedKey(pressed);
-            const target = sortedKey(props.passkey!);
-            if (attempt === target) {
-              setTimeout(() => props.onSuccess(), 400);
-            } else {
-              if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-              setWrong(true);
-              feedbackTimer.current = setTimeout(() => setWrong(false), 800);
-            }
-          }
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); if (feedbackTimer.current) clearTimeout(feedbackTimer.current); };
-  }, [mode, enterNeedsGamepad, props]);
-
-  // B to cancel for keyboard enter mode (no gamepad loop above)
+  // B to cancel for keyboard-only enter mode
   useEffect(() => {
     if (mode !== "enter" || enterNeedsGamepad) return;
     let raf = 0;
@@ -329,7 +424,7 @@ export function PasskeyOverlay(props: Props) {
     }
   };
 
-  const borderColor = wrong || pinWrong ? "border-destructive" : "border-primary";
+  const borderColor = pinWrong ? "border-destructive" : "border-primary";
   const heading = mode === "set" ? "Set Passkey" : "Enter Passkey";
 
   return (
@@ -341,7 +436,6 @@ export function PasskeyOverlay(props: Props) {
           <h2 className="mt-2 font-display text-3xl font-black">{profileName}</h2>
         </div>
 
-        {/* Tab switcher */}
         {(mode === "set" || (enterNeedsGamepad && enterNeedsPin)) && (
           <div className="flex rounded-2xl border border-border overflow-hidden">
             {(["gamepad", "keyboard"] as InputTab[]).map((t) => (
@@ -365,21 +459,7 @@ export function PasskeyOverlay(props: Props) {
         )}
 
         {mode === "enter" && tab === "gamepad" && (
-          <div className="flex flex-col gap-4">
-            <p className="text-center font-mono text-sm text-muted-foreground">Hold your 4-button passkey to unlock</p>
-            <div className="flex justify-center gap-3">
-              {Array.from({ length: 4 }, (_, i) => (
-                <div
-                  key={i}
-                  className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 font-display text-lg font-bold transition-all duration-150
-                    ${wrong ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-background text-muted-foreground"}`}
-                >
-                  ?
-                </div>
-              ))}
-            </div>
-            {wrong && <p className="text-center font-mono text-sm text-destructive">Wrong passkey</p>}
-          </div>
+          <GamepadEnterPanel passkey={props.passkey!} onSuccess={props.onSuccess} onCancel={props.onCancel} />
         )}
 
         {mode === "enter" && tab === "keyboard" && (
