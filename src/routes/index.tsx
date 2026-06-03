@@ -154,7 +154,12 @@ function Index() {
       if (pad) {
         const anyOpen = !!managing || settingsOpen || advancedOpen;
         const yNow = !!pad.buttons[3]?.pressed;
-        if (yNow && !lastY && !anyOpen) {
+        const canManage =
+          advancedConfig.allowRename ||
+          advancedConfig.allowTagline ||
+          advancedConfig.allowAvatar ||
+          advancedConfig.allowDelete;
+        if (yNow && !lastY && !anyOpen && canManage) {
           const idx = focusRef.current;
           if (idx < profiles.length) setManaging(profiles[idx]);
         }
@@ -244,14 +249,19 @@ function Index() {
                 }}
               />
               <ButtonHint action="back" label="Back" onClick={() => navigate({ to: "/" })} />
-              <ButtonHint
-                action="manage"
-                label="Manage Profile"
-                onClick={() => {
-                  const p = profiles[focusRef.current];
-                  if (p) setManaging(p);
-                }}
-              />
+              {(advancedConfig.allowRename ||
+                advancedConfig.allowTagline ||
+                advancedConfig.allowAvatar ||
+                advancedConfig.allowDelete) && (
+                <ButtonHint
+                  action="manage"
+                  label="Manage Profile"
+                  onClick={() => {
+                    const p = profiles[focusRef.current];
+                    if (p) setManaging(p);
+                  }}
+                />
+              )}
               <ButtonHint action="erase" label="Settings" onClick={() => setSettingsOpen(true)} />
             </>
           )}
