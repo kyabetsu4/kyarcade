@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { isElectron } from "@/lib/arcade-bridge";
 import { DEFAULT_ADVANCED_CONFIG, type AdvancedConfig } from "@/lib/arcade-bridge";
 
@@ -6,16 +6,29 @@ type Props = {
   onClose: () => void;
 };
 
+function pathsToText(paths: string[]) {
+  return paths.join("\n");
+}
+
+function textToPaths(text: string) {
+  return text
+    .split("\n")
+    .map((l) => l.trim().replace(/^~\//, ""))
+    .filter(Boolean);
+}
+
 export function AdvancedOptionsOverlay({ onClose }: Props) {
   const [config, setConfig] = useState<AdvancedConfig>(DEFAULT_ADVANCED_CONFIG);
-  const [newPath, setNewPath] = useState("");
+  const [pathsText, setPathsText] = useState(pathsToText(DEFAULT_ADVANCED_CONFIG.savePaths));
   const [newPasscode, setNewPasscode] = useState("");
   const [saved, setSaved] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isElectron()) {
-      window.arcade!.getAdvancedConfig().then(setConfig);
+      window.arcade!.getAdvancedConfig().then((c) => {
+        setConfig(c);
+        setPathsText(pathsToText(c.savePaths));
+      });
     }
   }, []);
 
@@ -27,27 +40,15 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const removePath = (i: number) => {
-    setConfig((c) => ({ ...c, savePaths: c.savePaths.filter((_, idx) => idx !== i) }));
-    setSaved(false);
-  };
-
-  const addPath = () => {
-    const trimmed = newPath.trim().replace(/^~\//, "");
-    if (!trimmed || config.savePaths.includes(trimmed)) return;
-    setConfig((c) => ({ ...c, savePaths: [...c.savePaths, trimmed] }));
-    setNewPath("");
-    setSaved(false);
-    inputRef.current?.focus();
-  };
-
   const save = async () => {
     const toSave: AdvancedConfig = {
       ...config,
+      savePaths: textToPaths(pathsText),
       ...(newPasscode.trim() ? { advancedPasscode: newPasscode.trim() } : {}),
     };
     if (isElectron()) await window.arcade!.saveAdvancedConfig(toSave);
     setConfig(toSave);
+    setPathsText(pathsToText(toSave.savePaths));
     setNewPasscode("");
     setSaved(true);
   };
@@ -65,6 +66,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
           <h2 className="mt-2 font-display text-3xl font-black">Advanced Options</h2>
         </div>
 
+        {/* Toggles */}
         <div className="flex flex-col gap-2">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
             Profile Modifications
@@ -82,30 +84,22 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
             <button
               key={key}
               type="button"
-              onClick={() => {
-                setConfig((c) => ({ ...c, [key]: !c[key] }));
-                setSaved(false);
-              }}
+              onClick={() => { setConfig((c) => ({ ...c, [key]: !c[key] })); setSaved(false); }}
               className="flex items-center justify-between rounded-2xl border border-border bg-background px-5 py-3 hover:border-primary/50 transition-colors"
             >
               <span className="font-mono text-sm text-foreground">{label}</span>
-              <div
-                className={`relative h-6 w-10 rounded-full transition-colors ${config[key] ? "bg-primary" : "bg-border"}`}
-              >
-                <div
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${config[key] ? "translate-x-4" : "translate-x-0.5"}`}
-                />
+              <div className={`relative h-6 w-10 rounded-full transition-colors ${config[key] ? "bg-primary" : "bg-border"}`}>
+                <div className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${config[key] ? "translate-x-4" : "translate-x-0.5"}`} />
               </div>
             </button>
           ))}
         </div>
 
+        {/* Admin passcode */}
         <div className="flex flex-col gap-2">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
             Admin Passcode
-            <span className="ml-2 normal-case tracking-normal">
-              — required to open Advanced Options
-            </span>
+            <span className="ml-2 normal-case tracking-normal">— required to open Advanced Options</span>
           </p>
           <div className="flex gap-2 items-center">
             <input
@@ -127,64 +121,23 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
           </div>
         </div>
 
+        {/* Save paths textarea */}
         <div className="flex flex-col gap-2">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground px-1">
             Save Paths
-            <span className="ml-2 normal-case tracking-normal">
-              — relative to $HOME, symlinked per profile
-            </span>
+            <span className="ml-2 normal-case tracking-normal">— one per line, relative to $HOME</span>
           </p>
-          {config.savePaths.length === 0 && (
-            <p className="text-center font-mono text-sm text-muted-foreground py-4">
-              No paths configured.
-            </p>
-          )}
-          {config.savePaths.map((p, i) => (
-            <div
-              key={p}
-              className="flex items-center justify-between rounded-2xl border border-border bg-background px-5 py-3"
-            >
-              <span className="font-mono text-sm text-foreground">~/{p}</span>
-              <button
-                type="button"
-                onClick={() => removePath(i)}
-                className="ml-4 rounded-xl border border-destructive/40 px-3 py-1 font-mono text-xs text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
+          <textarea
+            value={pathsText}
+            onChange={(e) => { setPathsText(e.target.value); setSaved(false); }}
+            rows={5}
+            spellCheck={false}
+            placeholder={"Emulation/saves\nEmulation/states"}
+            className="w-full rounded-2xl border border-border bg-background px-5 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none resize-none leading-relaxed"
+          />
         </div>
 
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground pointer-events-none">
-              ~/
-            </span>
-            <input
-              ref={inputRef}
-              type="text"
-              value={newPath}
-              onChange={(e) => {
-                setNewPath(e.target.value);
-                setSaved(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addPath();
-              }}
-              placeholder="Emulation/saves"
-              className="w-full rounded-2xl border border-border bg-background pl-9 pr-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={addPath}
-            className="rounded-2xl border border-primary bg-primary/10 px-5 py-3 font-mono text-sm text-primary hover:bg-primary/20 transition-colors"
-          >
-            Add
-          </button>
-        </div>
-
+        {/* Actions */}
         <div className="flex gap-3 justify-end">
           <button
             type="button"
@@ -198,7 +151,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
             onClick={save}
             className="rounded-2xl border border-primary bg-primary px-6 py-3 font-mono text-sm text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            {saved ? "Saved" : "Save"}
+            {saved ? "Saved ✓" : "Save"}
           </button>
         </div>
       </div>
