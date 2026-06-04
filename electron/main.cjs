@@ -6,6 +6,7 @@ const isDev = process.env.NODE_ENV === "development";
 const VITE_PORT = 8080;
 
 let esProcess = null;
+let mainWindow = null;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -30,6 +31,8 @@ function createWindow() {
     const allowed = isDev ? `http://localhost:${VITE_PORT}` : "file://";
     if (!url.startsWith(allowed)) e.preventDefault();
   });
+
+  mainWindow = win;
 }
 
 function ensureAutostart() {
@@ -200,8 +203,16 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
     stdio: "ignore",
     env: { ...process.env, HOME: home },
   });
+
+  // Hide kyarcade while ES-DE is running so controller input doesn't bleed through
+  if (mainWindow) mainWindow.hide();
+
   esProcess.once("exit", () => {
     esProcess = null;
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
   return { ok: true };
 });
