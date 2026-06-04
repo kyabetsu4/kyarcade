@@ -43,7 +43,7 @@ export function ArcadeShell({
               tabIndex={-1}
               onClick={onAdvanced}
               aria-label="Advanced options"
-              className="font-display text-5xl font-black leading-none text-muted-foreground/40 hover:text-muted-foreground transition-colors select-none"
+              className="flex items-center justify-center w-16 h-16 rounded-2xl font-display text-5xl font-black text-muted-foreground/40 hover:text-muted-foreground transition-colors select-none cursor-pointer"
             >
               ⚙
             </button>
