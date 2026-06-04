@@ -147,16 +147,21 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
   const esSettingsFile = path.join(esSettingsDir, "es_settings.xml");
   fs.mkdirSync(esSettingsDir, { recursive: true });
   if (!fs.existsSync(esSettingsFile)) {
+    // New profile — write settings with correct ROM directory
     fs.writeFileSync(
       esSettingsFile,
       `<?xml version="1.0"?>\n<settings>\n    <string name="ROMDirectory" value="${romDir}" />\n</settings>\n`,
     );
   } else {
+    // Existing profile — always correct the ROM directory regardless of current value
     let xml = fs.readFileSync(esSettingsFile, "utf8");
-    if (xml.includes('name="ROMDirectory" value=""')) {
-      xml = xml.replace('name="ROMDirectory" value=""', `name="ROMDirectory" value="${romDir}"`);
-      fs.writeFileSync(esSettingsFile, xml);
+    if (xml.includes('name="ROMDirectory"')) {
+      xml = xml.replace(/name="ROMDirectory" value="[^"]*"/, `name="ROMDirectory" value="${romDir}"`);
+    } else {
+      // Entry missing entirely — inject it
+      xml = xml.replace("</settings>", `    <string name="ROMDirectory" value="${romDir}" />\n</settings>`);
     }
+    fs.writeFileSync(esSettingsFile, xml);
   }
 
   fs.rmSync(esConfigDir, { recursive: true, force: true });
