@@ -206,7 +206,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
           )}
 
           {raScanned.length > 0 && (
-            <div className="flex flex-col gap-1 rounded-2xl border border-border bg-background p-4">
+            <div className="flex flex-col gap-1 rounded-2xl border border-border bg-background p-4 max-h-72 overflow-y-auto">
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Folder</span>
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Per Profile</span>

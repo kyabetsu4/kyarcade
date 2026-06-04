@@ -355,12 +355,17 @@ ipcMain.handle("list-subdirs", async (_event, relativePath, maxDepth = 3) => {
   const base = relativePath.replace(/^~\//, "");
   const results = [];
 
+  function isDir(fullPath) {
+    try { return fs.statSync(fullPath).isDirectory(); } catch { return false; }
+  }
+
   function walk(rel, depth) {
     if (depth > maxDepth) return;
     const full = path.join(home, rel);
     let entries;
     try {
-      entries = fs.readdirSync(full, { withFileTypes: true }).filter((d) => d.isDirectory());
+      entries = fs.readdirSync(full, { withFileTypes: true })
+        .filter((d) => d.isDirectory() || (d.isSymbolicLink() && isDir(path.join(full, d.name))));
     } catch {
       return;
     }
