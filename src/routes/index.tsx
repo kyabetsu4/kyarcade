@@ -150,7 +150,7 @@ function Index() {
     if (advancedConfig.advancedPasscode) {
       setAdvancedPinOpen(true);
     } else {
-      openAdvanced();
+      setAdvancedOpen(true);
     }
   };
 
