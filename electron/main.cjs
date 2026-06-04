@@ -333,7 +333,12 @@ ipcMain.handle("get-profiles", async () => {
       .map((d) => {
         const jsonPath = path.join(profilesDir, d.name, "profile.json");
         try {
-          return JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+          const profile = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+          // Convert raw absolute avatar paths to arcade:// URLs for the renderer
+          if (profile.avatar && profile.avatar.startsWith("/")) {
+            profile.avatar = `arcade://${profile.avatar}`;
+          }
+          return profile;
         } catch {
           return { id: d.name, name: d.name, avatar: null, tagline: "" };
         }

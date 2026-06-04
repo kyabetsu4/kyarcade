@@ -304,7 +304,7 @@ function Index() {
     >
       <div
         ref={carouselRef}
-        className="flex h-full w-full flex-1 items-center px-8 py-4"
+        className="flex h-full w-full flex-1 items-center px-8 py-4 overflow-hidden"
         style={{ clipPath: "inset(0 0 0 0)" }}
       >
         <div
