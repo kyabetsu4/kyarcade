@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld("arcade", {
   deleteProfile: (profileId) => ipcRenderer.invoke("delete-profile", profileId),
   getAdvancedConfig: () => ipcRenderer.invoke("get-advanced-config"),
   saveAdvancedConfig: (config) => ipcRenderer.invoke("save-advanced-config", config),
+  listSubdirs: (relativePath) => ipcRenderer.invoke("list-subdirs", relativePath),
 });

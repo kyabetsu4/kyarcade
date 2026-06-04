@@ -348,3 +348,17 @@ ipcMain.handle("get-profiles", async () => {
     return [];
   }
 });
+
+ipcMain.handle("list-subdirs", async (_event, relativePath) => {
+  const fs = require("fs");
+  const home = process.env.HOME || "";
+  const fullPath = path.join(home, relativePath.replace(/^~\//, ""));
+  try {
+    return fs
+      .readdirSync(fullPath, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => path.join(relativePath.replace(/^~\//, ""), d.name));
+  } catch {
+    return [];
+  }
+});

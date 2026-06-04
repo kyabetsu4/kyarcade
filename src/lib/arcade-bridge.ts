@@ -7,6 +7,7 @@ export interface AdvancedConfig {
   requirePasskeys: boolean;
   syncRomDir: boolean;
   advancedPasscode?: string;
+  retroarchPath?: string;
 }
 
 export const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
@@ -42,6 +43,7 @@ declare global {
       deleteProfile: (profileId: string) => Promise<{ ok: boolean }>;
       getAdvancedConfig: () => Promise<AdvancedConfig>;
       saveAdvancedConfig: (config: AdvancedConfig) => Promise<{ ok: boolean }>;
+      listSubdirs: (relativePath: string) => Promise<string[]>;
     };
   }
 }
