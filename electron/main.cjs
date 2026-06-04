@@ -349,16 +349,28 @@ ipcMain.handle("get-profiles", async () => {
   }
 });
 
-ipcMain.handle("list-subdirs", async (_event, relativePath) => {
+ipcMain.handle("list-subdirs", async (_event, relativePath, maxDepth = 3) => {
   const fs = require("fs");
   const home = process.env.HOME || "";
-  const fullPath = path.join(home, relativePath.replace(/^~\//, ""));
-  try {
-    return fs
-      .readdirSync(fullPath, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => path.join(relativePath.replace(/^~\//, ""), d.name));
-  } catch {
-    return [];
+  const base = relativePath.replace(/^~\//, "");
+  const results = [];
+
+  function walk(rel, depth) {
+    if (depth > maxDepth) return;
+    const full = path.join(home, rel);
+    let entries;
+    try {
+      entries = fs.readdirSync(full, { withFileTypes: true }).filter((d) => d.isDirectory());
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const childRel = path.join(rel, entry.name);
+      results.push(childRel);
+      walk(childRel, depth + 1);
+    }
   }
+
+  walk(base, 1);
+  return results;
 });

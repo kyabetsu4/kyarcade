@@ -65,8 +65,6 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
       setRaError("No subdirectories found — check the path.");
     } else {
       setRaScanned(subdirs);
-      // Pre-check paths whose last segment is in the per-profile defaults
-      // or that are already in the current savePaths
       const current = new Set(textToPaths(pathsText));
       const defaults = new Set(
         subdirs.filter((p) => {
@@ -77,6 +75,13 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
       setRaChecked(defaults);
     }
     setRaScanning(false);
+  };
+
+  // Depth of a path relative to the scan root
+  const raBase = raPath.trim().replace(/^~\//, "");
+  const depthOf = (p: string) => {
+    const rel = p.startsWith(raBase) ? p.slice(raBase.length) : p;
+    return rel.split("/").filter(Boolean).length - 1;
   };
 
   const applyRaSelection = () => {
@@ -209,7 +214,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
               {raScanned.map((p) => {
                 const name = p.split("/").pop() ?? p;
                 const checked = raChecked.has(p);
-                const isDefault = PER_PROFILE_DEFAULTS.has(name);
+                const depth = depthOf(p);
                 return (
                   <button
                     key={p}
@@ -222,14 +227,17 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
                       });
                     }}
                     className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-primary/5 transition-colors"
+                    style={{ paddingLeft: `${12 + depth * 20}px` }}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm text-foreground">{name}</span>
-                      {!isDefault && !checked && (
-                        <span className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">universal</span>
+                      {depth > 0 && (
+                        <span className="text-muted-foreground/30 font-mono text-xs select-none">{"└"}</span>
                       )}
+                      <span className={`font-mono text-sm ${depth === 0 ? "text-foreground font-bold" : "text-foreground"}`}>
+                        {name}
+                      </span>
                     </div>
-                    <div className={`relative h-6 w-10 rounded-full transition-colors ${checked ? "bg-primary" : "bg-border"}`}>
+                    <div className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? "bg-primary" : "bg-border"}`}>
                       <div className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
                     </div>
                   </button>
