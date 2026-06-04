@@ -5,6 +5,7 @@ export interface AdvancedConfig {
   allowTagline: boolean;
   allowDelete: boolean;
   requirePasskeys: boolean;
+  syncRomDir: boolean;
   advancedPasscode?: string;
 }
 
@@ -15,6 +16,7 @@ export const DEFAULT_ADVANCED_CONFIG: AdvancedConfig = {
   allowTagline: true,
   allowDelete: true,
   requirePasskeys: false,
+  syncRomDir: false,
 };
 
 export interface ArcadeProfile {

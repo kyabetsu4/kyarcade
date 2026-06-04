@@ -76,6 +76,7 @@ export function AdvancedOptionsOverlay({ onClose }: Props) {
               { key: "allowAvatar", label: "Allow Change Avatar" },
               { key: "allowDelete", label: "Allow Delete" },
               { key: "requirePasskeys", label: "Require Profile Passkeys" },
+              { key: "syncRomDir", label: "Copy ROM Directory to New Profiles" },
             ] as const
           ).map(({ key, label }) => (
             <button

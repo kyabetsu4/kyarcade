@@ -91,6 +91,26 @@ function loadAdvancedConfig(home) {
   }
 }
 
+function getFirstProfileRomDir(fs, home, fallback) {
+  try {
+    const profilesDir = path.join(home, "es-profiles");
+    const entries = fs.readdirSync(profilesDir).filter((e) => {
+      try {
+        return fs.statSync(path.join(profilesDir, e)).isDirectory() && e !== "__new";
+      } catch { return false; }
+    }).sort();
+    for (const entry of entries) {
+      const settingsFile = path.join(profilesDir, entry, "ES-DE", "settings", "es_settings.xml");
+      if (fs.existsSync(settingsFile)) {
+        const xml = fs.readFileSync(settingsFile, "utf8");
+        const match = xml.match(/name="ROMDirectory" value="([^"]+)"/);
+        if (match && match[1]) return match[1];
+      }
+    }
+  } catch {}
+  return fallback;
+}
+
 function swapSaveSymlink(fs, home, profileId, relativePath) {
   const targetPath = path.join(home, relativePath);
   const profileStorage = path.join(home, "es-profiles", profileId, relativePath);
@@ -147,10 +167,13 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
   const esSettingsFile = path.join(esSettingsDir, "es_settings.xml");
   fs.mkdirSync(esSettingsDir, { recursive: true });
   if (!fs.existsSync(esSettingsFile)) {
-    // New profile — write settings with correct ROM directory
+    // New profile — pick ROM directory
+    const newProfileRomDir = syncRomDir
+      ? getFirstProfileRomDir(fs, home, romDir)
+      : romDir;
     fs.writeFileSync(
       esSettingsFile,
-      `<?xml version="1.0"?>\n<settings>\n    <string name="ROMDirectory" value="${romDir}" />\n</settings>\n`,
+      `<?xml version="1.0"?>\n<settings>\n    <string name="ROMDirectory" value="${newProfileRomDir}" />\n</settings>\n`,
     );
   } else {
     // Existing profile — always correct the ROM directory regardless of current value
@@ -167,7 +190,7 @@ ipcMain.handle("launch-profile", async (_event, profileId) => {
   fs.rmSync(esConfigDir, { recursive: true, force: true });
   fs.symlinkSync(profileDir, esConfigDir);
 
-  const { savePaths } = loadAdvancedConfig(home);
+  const { savePaths, syncRomDir } = loadAdvancedConfig(home);
   for (const relativePath of savePaths) {
     swapSaveSymlink(fs, home, profileId, relativePath);
   }
