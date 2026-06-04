@@ -32,7 +32,39 @@ function createWindow() {
   });
 }
 
+function ensureAutostart() {
+  // Only applies when running as a packaged AppImage on Linux
+  const appImagePath = process.env.APPIMAGE;
+  if (!appImagePath || process.platform !== "linux") return;
+
+  const fs = require("fs");
+  const os = require("os");
+  const autostartDir = path.join(os.homedir(), ".config", "autostart");
+  const desktopFile = path.join(autostartDir, "kyarcade.desktop");
+
+  if (fs.existsSync(desktopFile)) return; // already registered
+
+  try {
+    fs.mkdirSync(autostartDir, { recursive: true });
+    fs.writeFileSync(
+      desktopFile,
+      [
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=kyarcade",
+        `Exec=${appImagePath}`,
+        "Hidden=false",
+        "NoDisplay=false",
+        "X-GNOME-Autostart-enabled=true",
+      ].join("\n") + "\n",
+    );
+  } catch (e) {
+    console.error("kyarcade: failed to write autostart entry:", e);
+  }
+}
+
 app.whenReady().then(() => {
+  ensureAutostart();
   protocol.registerFileProtocol("arcade", (request, callback) => {
     const filePath = decodeURIComponent(request.url.replace("arcade://", "/"));
     callback({ path: filePath });
