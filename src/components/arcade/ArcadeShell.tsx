@@ -20,7 +20,7 @@ export function ArcadeShell({
 }) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="relative z-10 flex items-center justify-between px-8 py-8">
+      <header className="relative z-20 flex items-center justify-between px-8 py-8">
         <div className="flex items-center gap-6">
           {eyebrow ? (
             <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
